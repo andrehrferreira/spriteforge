@@ -1,0 +1,23 @@
+# Dependências
+node_modules/
+
+# Build
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Artefatos de ferramentas locais
+.playwright-mcp/
+.claude/settings.local.json
+
+# Ambiente
+.env
+.env.*
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
