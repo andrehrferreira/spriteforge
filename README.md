@@ -118,6 +118,15 @@ manifesto JSON único (`meta.version = 4` é a versão do formato;
 Todos os atlas compartilham a mesma célula e pivô — a engine pode trocar de
 animação sem o sprite "pular".
 
+## Fatiador de itens
+
+Ferramenta avulsa (na tela inicial) para folhas de itens (gemas, ícones,
+drops): detecta cada item automaticamente (componentes conectados no alpha,
+com remoção de fundo sólido quando a folha vem opaca), mostra as caixas de
+corte num preview editável (mover, redimensionar, criar, excluir, ajuste
+numérico) e exporta todos no mesmo tamanho quadrado (32–128px, padrão
+64×64) com PNG quantizado, num ZIP único com manifesto.
+
 ## Backup no servidor local
 
 O IndexedDB morre se o cache do navegador for limpo. O `npm run dev` sobe

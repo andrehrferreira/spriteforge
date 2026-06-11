@@ -7,6 +7,7 @@ import { initAlign } from './align'
 import { backupAvailable, deleteBackup, listBackups, restoreBackup, uploadBackup } from './backup'
 import { initGenVideo } from './genvideo'
 import { initNormalize } from './normalize'
+import { initSlicer } from './slicer'
 import { initSprites } from './sprites'
 import { DEFAULT_SETTINGS } from './chroma'
 import { deleteProject, listProjects, putProject, uid } from './db'
@@ -19,13 +20,13 @@ import { newProject, type AnimationData, type ProjectData } from './types'
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T =>
   document.querySelector(sel) as T
 
-type Screen = 'home' | 'project' | 'editor' | 'align' | 'sprites' | 'normalize' | 'genvideo'
+type Screen = 'home' | 'project' | 'editor' | 'align' | 'sprites' | 'normalize' | 'genvideo' | 'slicer'
 let cleanup: (() => void) | null = null
 
 function show(screen: Screen): void {
   cleanup?.()
   cleanup = null
-  for (const s of ['home', 'project', 'editor', 'align', 'sprites', 'normalize', 'genvideo'] as const) {
+  for (const s of ['home', 'project', 'editor', 'align', 'sprites', 'normalize', 'genvideo', 'slicer'] as const) {
     $(`#screen-${s}`).classList.toggle('hidden', s !== screen)
   }
   document.body.classList.toggle('in-editor', screen !== 'home' && screen !== 'project')
@@ -174,6 +175,13 @@ $<HTMLButtonElement>('#btn-normalize').onclick = () => {
   crumb('normalizador de referências')
   setNav('← INÍCIO', () => void goHome())
   cleanup = initNormalize()
+}
+
+$<HTMLButtonElement>('#btn-slicer').onclick = () => {
+  show('slicer')
+  crumb('fatiador de itens')
+  setNav('← INÍCIO', () => void goHome())
+  cleanup = initSlicer()
 }
 
 function openProject(p: ProjectData): void {

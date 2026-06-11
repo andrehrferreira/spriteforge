@@ -43,6 +43,10 @@
         <span class="tool-desc dim">normalizar imagens de referência — pés no mesmo pivô, centralizadas, fundo chroma #00b140</span>
         <button id="btn-normalize" class="btn">NORMALIZADOR_</button>
       </div>
+      <div class="cfg-row tool-row">
+        <span class="tool-desc dim">fatiar folha de itens (gemas, ícones, drops) — detecção automática, ajuste do corte e exportação uniforme em ZIP</span>
+        <button id="btn-slicer" class="btn">FATIADOR DE ITENS_</button>
+      </div>
     </div>
 
     <div id="project-list" class="proj-list"></div>
@@ -438,6 +442,99 @@
           <div class="panel-title">VERSÕES <span id="sp-ver-count" class="dim"></span></div>
           <div class="frames-hint dim">gerações salvas no projeto — baixe em ZIP, regere ou exclua</div>
           <div id="sp-versions" class="align-rows"></div>
+        </section>
+      </aside>
+
+    </div>
+  </main>
+
+  <!-- ════ TELA: FATIADOR DE ITENS ════ -->
+  <main id="screen-slicer" class="screen editor hidden">
+    <div class="align-grid">
+
+      <section class="panel align-preview-panel">
+        <div class="panel-title">FATIADOR DE ITENS <span id="sl-status" class="dim"></span><span id="sl-count" class="dim"></span>
+          <div class="title-actions">
+            <button id="sl-add" class="btn btn-small">+ IMAGEM</button>
+          </div>
+        </div>
+        <input type="file" id="sl-file" accept="image/*" hidden />
+        <div class="frames-hint dim">clique seleciona &middot; arraste move &middot; alça no canto redimensiona &middot; arraste no vazio cria caixa &middot; Delete exclui</div>
+        <div id="sl-wrap" class="preview-wrap checker align-wrap">
+          <canvas id="sl-canvas"></canvas>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <div class="panel-title">DETECÇÃO
+            <div class="title-actions">
+              <button id="sl-redetect" class="btn btn-small">REDETECTAR</button>
+            </div>
+          </div>
+          <label class="slider-field">
+            <span class="sf-head">LIMIAR ALFA <span class="value" id="sl-threshold-val">24</span></span>
+            <input type="range" id="sl-threshold" min="1" max="255" value="24" />
+          </label>
+          <div class="cfg-row tight">
+            <label class="field">
+              <span class="field-label">ÁREA MÍNIMA</span>
+              <input type="number" id="sl-minarea" class="text-input" min="1" max="10000" value="64" />
+            </label>
+            <label class="field">
+              <span class="field-label">FUSÃO (PX)</span>
+              <input type="number" id="sl-merge" class="text-input" min="0" max="128" value="12" />
+            </label>
+            <label class="field">
+              <span class="field-label">TOL. FUNDO</span>
+              <input type="number" id="sl-tol" class="text-input" min="0" max="300" value="14" title="tolerância da remoção de fundo sólido" />
+            </label>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">CAIXA <span id="sl-selinfo" class="dim"></span></div>
+          <div class="cfg-row tight">
+            <label class="field"><span class="field-label">X</span><input type="number" id="sl-x" class="text-input" /></label>
+            <label class="field"><span class="field-label">Y</span><input type="number" id="sl-y" class="text-input" /></label>
+            <label class="field"><span class="field-label">L</span><input type="number" id="sl-w" class="text-input" min="4" /></label>
+            <label class="field"><span class="field-label">A</span><input type="number" id="sl-h" class="text-input" min="4" /></label>
+          </div>
+          <button id="sl-delete" class="btn btn-small btn-block danger" style="margin-top: 10px" disabled>EXCLUIR CAIXA</button>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">EXPORTAR</div>
+          <label class="field">
+            <span class="field-label">NOME BASE</span>
+            <input type="text" id="sl-name" class="text-input" spellcheck="false" value="item" />
+          </label>
+          <div class="cfg-row tight" style="margin-top: 10px">
+            <label class="field">
+              <span class="field-label">TAMANHO</span>
+              <select id="sl-size">
+                <option value="32">32×32</option>
+                <option value="48">48×48</option>
+                <option value="64" selected>64×64</option>
+                <option value="96">96×96</option>
+                <option value="128">128×128</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">MARGEM %</span>
+              <input type="number" id="sl-margin" class="text-input" min="0" max="40" value="6" />
+            </label>
+          </div>
+          <label class="field" style="margin-top: 10px">
+            <span class="field-label">COMPACTAÇÃO</span>
+            <select id="sl-colors">
+              <option value="0">sem perda (otimizado)</option>
+              <option value="256" selected>256 cores (recomendado)</option>
+              <option value="128">128 cores</option>
+            </select>
+          </label>
+          <div id="sl-summary" class="exp-summary dim"></div>
+          <button id="sl-export" class="btn btn-primary btn-block">EXPORTAR ZIP_</button>
         </section>
       </aside>
 

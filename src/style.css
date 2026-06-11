@@ -578,7 +578,8 @@ input[type="range"]::-moz-range-thumb {
 
 .align-preview-panel { grid-area: apreview; }
 .align-preview-panel .align-wrap { height: auto; flex: 1; min-height: 220px; }
-#align-canvas, #norm-canvas, #sp-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#align-canvas, #norm-canvas, #sp-canvas, #sl-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#sl-canvas { cursor: crosshair; }
 #align-canvas { cursor: grab; }
 #align-canvas.dragging { cursor: grabbing; }
 #norm-canvas { cursor: ns-resize; }
