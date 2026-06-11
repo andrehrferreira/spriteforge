@@ -313,7 +313,21 @@ export function initAlign(): () => void {
     for (const a of project.animations) {
       if (!loops.has(a.id)) continue
       const row = document.createElement('div')
-      row.className = 'align-row'
+      row.className = 'align-row' + (a.exportEnabled === false ? ' off' : '')
+
+      const check = document.createElement('input')
+      check.type = 'checkbox'
+      check.className = 'ar-check'
+      check.checked = a.exportEnabled !== false
+      check.title = 'incluir na exportação'
+      check.onchange = () => {
+        a.exportEnabled = check.checked
+        row.classList.toggle('off', !check.checked)
+        updateInfo()
+        scheduleSave()
+      }
+      row.append(check)
+
       const name = document.createElement('span')
       name.className = 'ar-name'
       name.textContent = a.name + (bounds.get(a.id) ? '' : ' ⚠')
@@ -411,7 +425,7 @@ export function initAlign(): () => void {
   function animLayouts() {
     const cell = cellDims()
     return project.animations
-      .filter((a) => loops.has(a.id) && bounds.get(a.id))
+      .filter((a) => loops.has(a.id) && bounds.get(a.id) && a.exportEnabled !== false)
       .map((a) => ({
         a,
         loop: loops.get(a.id)!,
