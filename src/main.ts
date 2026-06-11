@@ -6,6 +6,7 @@ import './style.css'
 import { initAlign } from './align'
 import { initGenVideo } from './genvideo'
 import { initNormalize } from './normalize'
+import { initSprites } from './sprites'
 import { DEFAULT_SETTINGS } from './chroma'
 import { deleteProject, listProjects, putProject, uid } from './db'
 import { autoKey, initEditor } from './editor'
@@ -17,13 +18,13 @@ import { newProject, type AnimationData, type ProjectData } from './types'
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T =>
   document.querySelector(sel) as T
 
-type Screen = 'home' | 'project' | 'editor' | 'align' | 'normalize' | 'genvideo'
+type Screen = 'home' | 'project' | 'editor' | 'align' | 'sprites' | 'normalize' | 'genvideo'
 let cleanup: (() => void) | null = null
 
 function show(screen: Screen): void {
   cleanup?.()
   cleanup = null
-  for (const s of ['home', 'project', 'editor', 'align', 'normalize', 'genvideo'] as const) {
+  for (const s of ['home', 'project', 'editor', 'align', 'sprites', 'normalize', 'genvideo'] as const) {
     $(`#screen-${s}`).classList.toggle('hidden', s !== screen)
   }
   document.body.classList.toggle('in-editor', screen !== 'home' && screen !== 'project')
@@ -165,6 +166,7 @@ function goProject(): void {
   }
 
   $<HTMLButtonElement>('#btn-genvideo-proj').onclick = goGenVideo
+  $<HTMLButtonElement>('#btn-sprites-proj').onclick = goSprites
 
   hideImportPanel()
   renderRefsRow()
@@ -485,7 +487,25 @@ function goAlign(): void {
     void saveProject()
     goProject()
   })
+  $<HTMLButtonElement>('#btn-align-next').onclick = goSprites
   cleanup = initAlign()
+}
+
+// ════ SPRITES ════════════════════════════════════════════
+
+function goSprites(): void {
+  const p = state.project!
+  if (!p.animations.length) {
+    toast('ADICIONE AO MENOS 1 VÍDEO', true)
+    return
+  }
+  show('sprites')
+  crumb(`${p.name} / sprites`)
+  setNav('← VOLTAR', () => {
+    void saveProject()
+    goProject()
+  })
+  cleanup = initSprites()
 }
 
 // ════ start ══════════════════════════════════════════════

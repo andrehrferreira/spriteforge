@@ -1,11 +1,10 @@
 /**
- * Tela de alinhamento: analisa o conteúdo opaco de todas as animações,
- * define uma célula comum + pivô compartilhado, permite ajuste fino por
- * animação (posição/escala) e exporta o atlas único PNG + JSON.
+ * Tela de alinhamento: analisa o conteúdo opaco de todas as animações e
+ * define a célula comum + pivô compartilhado, com ajuste fino por animação
+ * (posição/escala). A geração dos atlas acontece na área SPRITES.
  */
 
 import { ChromaProcessor } from './chroma'
-import { compressionLabel, computeLayout, downloadBlob, encodeCanvas, formatBytes, MAX_SHEET_DIM, slugify } from './export'
 import { createLoop, type Loop } from './loop'
 import { ensureFrames, saveProject, selectedBitmaps, state } from './state'
 import { toast } from './toast'
@@ -19,7 +18,6 @@ interface Bounds { x: number; y: number; w: number; h: number }
 export function initAlign(): () => void {
   const project = state.project!
   const cfg = project.alignCfg
-  const exp = project.exportCfg
   const proc = new ChromaProcessor()
 
   let alive = true
@@ -423,202 +421,11 @@ export function initAlign(): () => void {
     void prepare()
   }
 
-  // ── exportação do atlas ─────────────────────────────────
-  const expScale = $<HTMLSelectElement>('#aexp-scale')
-  const expPadding = $<HTMLInputElement>('#aexp-padding')
-  const expCols = $<HTMLInputElement>('#aexp-cols')
-  const expColors = $<HTMLSelectElement>('#aexp-colors')
-  expScale.value = String(exp.scale)
-  expPadding.value = String(exp.padding)
-  expCols.value = String(exp.columns)
-  expColors.value = String(exp.colors)
-
-  expScale.onchange = () => { exp.scale = Number(expScale.value); afterCfgChange() }
-  expPadding.oninput = () => { exp.padding = Math.max(0, Math.floor(Number(expPadding.value) || 0)); afterCfgChange() }
-  expCols.oninput = () => { exp.columns = Math.max(0, Math.floor(Number(expCols.value) || 0)); afterCfgChange() }
-  expColors.onchange = () => { exp.colors = Number(expColors.value); scheduleSave() }
-
-  /** um atlas por animação: layout individual com a célula comum */
-  function animLayouts() {
-    const cell = cellDims()
-    return project.animations
-      .filter((a) => loops.has(a.id) && bounds.get(a.id))
-      .map((a) => ({
-        a,
-        loop: loops.get(a.id)!,
-        layout: computeLayout(loops.get(a.id)!.length, cell.W, cell.H, exp),
-      }))
-  }
-
   function updateInfo(): void {
     if (!ready) return
     const cell = cellDims()
     $('#cell-info').textContent =
       `célula ${cell.W}×${cell.H}px · pivô (${Math.round(cell.px)}, ${Math.round(cell.py)})`
-    const items = animLayouts()
-    const summary = $('#align-summary')
-    if (!items.length) {
-      summary.textContent = 'nenhum frame para exportar'
-      summary.classList.add('warn')
-      return
-    }
-    let maxW = 0
-    let maxH = 0
-    let total = 0
-    for (const it of items) {
-      maxW = Math.max(maxW, it.layout.width)
-      maxH = Math.max(maxH, it.layout.height)
-      total += it.loop.length
-    }
-    const tooBig = maxW > MAX_SHEET_DIM || maxH > MAX_SHEET_DIM
-    summary.classList.toggle('warn', tooBig)
-    summary.innerHTML =
-      `<b>${items.length}</b> atlas (1 por animação) · <b>${total}</b> frames · célula <b>${items[0].layout.cellW}×${items[0].layout.cellH}</b><br>` +
-      `maior atlas <b>${maxW}×${maxH}px</b>` +
-      (tooBig ? '<br>⚠ atlas acima de 16384px — reduza a escala' : '')
-  }
-
-  const exportBtn = $<HTMLButtonElement>('#btn-export-all')
-  exportBtn.onclick = async () => {
-    if (!ready) return
-    if (preparing) {
-      toast('AGUARDE TODAS AS ANIMAÇÕES CARREGAREM')
-      return
-    }
-    const items = animLayouts()
-    if (!items.length) {
-      toast('NENHUM FRAME PARA EXPORTAR', true)
-      return
-    }
-    for (const it of items) {
-      if (it.layout.width > MAX_SHEET_DIM || it.layout.height > MAX_SHEET_DIM) {
-        toast(`ATLAS DE "${it.a.name}" GRANDE DEMAIS — REDUZA A ESCALA`, true)
-        return
-      }
-    }
-    exportBtn.disabled = true
-    exportBtn.textContent = 'GERANDO...'
-    try {
-      await new Promise((r) => setTimeout(r, 30))
-      const cell = cellDims()
-      const slug = slugify(project.name)
-      const usedSlugs = new Set<string>()
-      const animsJson: Record<string, object> = {}
-      let totalBytes = 0
-
-      for (let i = 0; i < items.length; i++) {
-        const { a, loop, layout } = items[i]
-        exportBtn.textContent = `GERANDO ${i + 1}/${items.length}...`
-        let aslug = slugify(a.name)
-        for (let n = 2; usedSlugs.has(aslug); n++) aslug = `${slugify(a.name)}_${n}`
-        usedSlugs.add(aslug)
-
-        const { png, frames } = await buildAtlasFor(a, loop, aslug, cell, layout)
-        const imageName = `${slug}_${aslug}.png`
-        downloadBlob(png, imageName)
-        totalBytes += png.size
-        animsJson[aslug] = {
-          image: imageName,
-          size: { w: layout.width, h: layout.height },
-          columns: layout.cols,
-          rows: layout.rows,
-          frameCount: loop.length,
-          fps: a.fps,
-          loop: true,
-          crossfade: loop.k,
-          frames,
-        }
-        // intervalo entre downloads para o navegador não bloquear a sequência
-        await new Promise((r) => setTimeout(r, 250))
-      }
-
-      const manifest = JSON.stringify(
-        {
-          meta: {
-            app: 'SpriteForge',
-            version: 3,
-            project: project.name,
-            format: 'RGBA8888',
-            frameSize: { w: items[0].layout.cellW, h: items[0].layout.cellH },
-            pivot: { x: cfg.pivotX, y: cfg.pivotY },
-            margin: cfg.margin,
-            scale: exp.scale,
-            padding: exp.padding,
-            compression: compressionLabel(exp.colors),
-          },
-          animations: animsJson,
-        },
-        null,
-        2,
-      )
-      downloadBlob(new Blob([manifest], { type: 'application/json' }), `${slug}.json`)
-      void saveProject()
-      toast(`${items.length} ATLAS EXPORTADOS ✓ ${formatBytes(totalBytes)}`)
-    } catch (err) {
-      console.error(err)
-      toast('ERRO AO EXPORTAR', true)
-    } finally {
-      exportBtn.disabled = false
-      exportBtn.textContent = 'EXPORTAR TUDO_'
-    }
-  }
-
-  /** gera o atlas individual de uma animação, usando a célula e o pivô comuns */
-  async function buildAtlasFor(
-    a: AnimationData,
-    loop: Loop,
-    aslug: string,
-    cell: { W: number; H: number; px: number; py: number },
-    layout: ReturnType<typeof computeLayout>,
-  ): Promise<{ png: Blob; frames: object[] }> {
-    const gs = exp.scale
-    const { cellW, cellH, cols, padding: pad } = layout
-
-    const atlas = document.createElement('canvas')
-    atlas.width = layout.width
-    atlas.height = layout.height
-    const atx = atlas.getContext('2d')!
-
-    const cellCv = document.createElement('canvas')
-    cellCv.width = cellW
-    cellCv.height = cellH
-    const cellCtx = cellCv.getContext('2d')!
-
-    const b = bounds.get(a.id)!
-    const s = a.align.scale
-    const { ax, ay } = anchor(a, b)
-    const si = selIdxs.get(a.id)
-    const frames: object[] = []
-
-    for (let p = 0; p < loop.length; p++) {
-      const frame = loop.render(p)
-      cellCtx.clearRect(0, 0, cellW, cellH)
-      cellCtx.imageSmoothingEnabled = s * gs < 1
-      cellCtx.imageSmoothingQuality = 'high'
-      cellCtx.drawImage(
-        frame,
-        (cell.px - ax * s) * gs,
-        (cell.py - ay * s) * gs,
-        frame.width * s * gs,
-        frame.height * s * gs,
-      )
-      const col = p % cols
-      const row = Math.floor(p / cols)
-      const x = pad + col * (cellW + pad)
-      const y = pad + row * (cellH + pad)
-      atx.drawImage(cellCv, x, y)
-      const mult = si ? a.speed[si[loop.k + p]] ?? 1 : 1
-      frames.push({
-        name: `${aslug}_${String(p).padStart(3, '0')}`,
-        index: p,
-        x, y, w: cellW, h: cellH,
-        duration_ms: Math.round(1000 / (a.fps * mult)),
-      })
-      if (p % 8 === 7) await new Promise((r) => setTimeout(r, 0))
-    }
-
-    const png = await encodeCanvas(atlas, exp.colors)
-    return { png, frames }
   }
 
   // ── teclado ─────────────────────────────────────────────

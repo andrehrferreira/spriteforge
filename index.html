@@ -142,7 +142,8 @@
     <div class="proj-head">
       <input id="proj-title" class="proj-title" spellcheck="false" title="nome do projeto" />
       <button id="btn-genvideo-proj" class="btn">GERAR VÍDEO_</button>
-      <button id="btn-align" class="btn btn-primary">ALINHAR &amp; EXPORTAR_</button>
+      <button id="btn-align" class="btn">ALINHAR_</button>
+      <button id="btn-sprites-proj" class="btn btn-primary">SPRITES_</button>
     </div>
 
     <input type="file" id="anim-file" accept="video/*" hidden />
@@ -360,11 +361,49 @@
         </section>
 
         <section class="panel">
-          <div class="panel-title">EXPORTAR ATLAS</div>
+          <div class="frames-hint dim">a exportação acontece na área SPRITES, a etapa seguinte do fluxo</div>
+          <button id="btn-align-next" class="btn btn-primary btn-block">AVANÇAR &rarr; SPRITES_</button>
+        </section>
+      </aside>
+
+    </div>
+  </main>
+
+  <!-- ════ TELA: SPRITES (análise, geração e versões) ════ -->
+  <main id="screen-sprites" class="screen editor hidden">
+    <div class="align-grid">
+
+      <section class="panel align-preview-panel">
+        <div class="panel-title">SPRITES <span id="sp-status" class="dim"></span></div>
+        <div id="sp-tabs" class="chip-row"></div>
+        <div id="sp-wrap" class="preview-wrap checker align-wrap">
+          <canvas id="sp-canvas"></canvas>
+        </div>
+        <div class="preview-controls">
+          <button id="sp-prev" class="btn btn-icon" title="frame anterior (&larr;)">&#9198;</button>
+          <button id="sp-play" class="btn btn-icon" title="play/pause (espaço)">&#9208;</button>
+          <button id="sp-next" class="btn btn-icon" title="próximo frame (&rarr;)">&#9197;</button>
+          <span id="sp-info" class="dim cell-info"></span>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <div class="panel-title">ANÁLISE <span id="sp-an-count" class="dim"></span>
+            <div class="title-actions">
+              <button id="sp-reanalyze" class="btn btn-small" title="roda a análise de novo">REANALISAR</button>
+            </div>
+          </div>
+          <div class="frames-hint dim">propostas de correção — aceite, rejeite ou ajuste; nada altera as animações originais</div>
+          <div id="sp-corrections" class="align-rows sp-corrections"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">EXPORTAÇÃO</div>
           <div class="cfg-row tight">
             <label class="field">
               <span class="field-label">ESCALA</span>
-              <select id="aexp-scale">
+              <select id="sp-scale">
                 <option value="0.25">0.25&times;</option>
                 <option value="0.5">0.5&times;</option>
                 <option value="1" selected>1&times;</option>
@@ -373,16 +412,16 @@
             </label>
             <label class="field">
               <span class="field-label">PADDING</span>
-              <input type="number" id="aexp-padding" class="text-input" min="0" max="32" value="0" />
+              <input type="number" id="sp-padding" class="text-input" min="0" max="32" value="0" />
             </label>
             <label class="field">
               <span class="field-label">COLUNAS</span>
-              <input type="number" id="aexp-cols" class="text-input" min="0" max="64" value="0" title="0 = automático" />
+              <input type="number" id="sp-cols" class="text-input" min="0" max="64" value="0" title="0 = automático" />
             </label>
           </div>
           <label class="field" style="margin-top: 10px">
             <span class="field-label">COMPACTAÇÃO</span>
-            <select id="aexp-colors" title="paleta menor = arquivo menor">
+            <select id="sp-colors" title="paleta menor = arquivo menor">
               <option value="-1">nenhuma (rápido, 32-bit)</option>
               <option value="0">sem perda (otimizado)</option>
               <option value="256" selected>256 cores (recomendado)</option>
@@ -390,8 +429,14 @@
               <option value="64">64 cores</option>
             </select>
           </label>
-          <div id="align-summary" class="exp-summary dim"></div>
-          <button id="btn-export-all" class="btn btn-primary btn-block">EXPORTAR TUDO_</button>
+          <div id="sp-summary" class="exp-summary dim"></div>
+          <button id="sp-generate" class="btn btn-primary btn-block">GERAR &amp; SALVAR_</button>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">VERSÕES <span id="sp-ver-count" class="dim"></span></div>
+          <div class="frames-hint dim">gerações salvas no projeto — baixe em ZIP, regere ou exclua</div>
+          <div id="sp-versions" class="align-rows"></div>
         </section>
       </aside>
 

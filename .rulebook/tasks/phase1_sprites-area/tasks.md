@@ -7,10 +7,10 @@
 
 ## 2. Migração da exportação (align → sprites)
 
-- [ ] 2.1 `index.html`: criar `#screen-sprites` (tema pixel/CRT, pt-BR) com painel de propostas, preview, configuração de exportação (escala/padding/colunas/compactação migrados do align) e lista de versões; remover `aexp-*` e `#btn-export-all` do `#screen-align`; adicionar "AVANÇAR → SPRITES" no align e botão SPRITES no dashboard
-- [ ] 2.2 `src/main.ts`: adicionar `'sprites'` ao union `Screen` e ao `show()`; rota `goSprites()` acessível do dashboard e do alinhamento; navegação VOLTAR
-- [ ] 2.3 `src/sprites.ts` (novo): tela base com `prepare()` incremental (ensureFrames + loops + bounds + célula comum, padrão do align), flag `alive` para aborto e cleanup; geração movida de `buildAtlasFor`/`animLayouts` reutilizando `computeLayout`/`encodeCanvas`
-- [ ] 2.4 `src/align.ts`: remover geração/manifesto/exportação e referências mortas (`tsc --noEmit` limpo); manter célula/pivô/margem/ajuste fino/ghost
+- [x] 2.1 `index.html`: criar `#screen-sprites` (tema pixel/CRT, pt-BR) com painel de propostas, preview, configuração de exportação (escala/padding/colunas/compactação migrados do align) e lista de versões; remover `aexp-*` e `#btn-export-all` do `#screen-align`; adicionar "AVANÇAR → SPRITES" no align e botão SPRITES no dashboard
+- [x] 2.2 `src/main.ts`: adicionar `'sprites'` ao union `Screen` e ao `show()`; rota `goSprites()` acessível do dashboard e do alinhamento; navegação VOLTAR
+- [x] 2.3 `src/sprites.ts` (novo): tela base com `prepare()` incremental (ensureFrames + loops + bounds + célula comum, padrão do align), flag `alive` para aborto e cleanup; geração movida reutilizando `computeLayout`/`encodeCanvas`, persistindo via `putSheet`
+- [x] 2.4 `src/align.ts`: removida geração/manifesto/exportação e referências mortas (`tsc --noEmit` limpo); mantidos célula/pivô/margem/ajuste fino/ghost
 
 ## 3. Motor de análise
 
