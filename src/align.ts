@@ -5,7 +5,7 @@
  */
 
 import { ChromaProcessor } from './chroma'
-import { compressionLabel, computeLayout, downloadBlob, encodeCanvas, MAX_SHEET_DIM } from './export'
+import { compressionLabel, computeLayout, downloadBlob, encodeCanvas, formatBytes, MAX_SHEET_DIM, slugify } from './export'
 import { createLoop, type Loop } from './loop'
 import { ensureFrames, saveProject, selectedBitmaps, state } from './state'
 import { toast } from './toast'
@@ -654,13 +654,3 @@ export function initAlign(): () => void {
   }
 }
 
-function slugify(name: string): string {
-  return name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') || 'sprite'
-}
-
-function formatBytes(n: number): string {
-  if (n >= 1048576) return `${(n / 1048576).toFixed(1)} MB`
-  if (n >= 1024) return `${Math.round(n / 1024)} KB`
-  return `${n} B`
-}

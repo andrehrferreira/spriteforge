@@ -5,7 +5,7 @@
 
 import { putProject } from './db'
 import { extractFrames, type ExtractedFrame } from './extract'
-import type { AnimationData, ProjectData } from './types'
+import { defaultSpritesCfg, type AnimationData, type ProjectData } from './types'
 
 export const state = {
   project: null as ProjectData | null,
@@ -13,9 +13,46 @@ export const state = {
 }
 
 export function openProjectState(p: ProjectData): void {
-  if (!Array.isArray(p.refs)) p.refs = [] // projetos antigos não têm referências
+  // backfill para projetos salvos antes destes campos existirem
+  if (!Array.isArray(p.refs)) p.refs = []
+  if (!p.spritesCfg) p.spritesCfg = defaultSpritesCfg()
   state.project = p
   state.frames.clear()
+}
+
+/**
+ * Hash do estado relevante das animações + alinhamento. Um spritesheet salvo
+ * com hash diferente do atual está desatualizado (stale) e precisa regerar.
+ */
+export function animStateHash(p: ProjectData): string {
+  const parts: (string | number)[] = [p.alignCfg.pivotX, p.alignCfg.pivotY, p.alignCfg.margin]
+  for (const a of p.animations) {
+    parts.push(
+      a.id,
+      a.videoName,
+      a.extractFps,
+      a.maxDim,
+      a.fps,
+      a.crossfade,
+      a.selected.map((s) => (s ? 1 : 0)).join(''),
+      a.speed.join(','),
+      a.curve.map((c) => `${c.t}:${c.v}`).join(','),
+      a.chroma.enabled ? 1 : 0,
+      a.chroma.key.join(','),
+      a.chroma.similarity,
+      a.chroma.smoothness,
+      a.chroma.spill,
+      a.chroma.halo,
+      a.align.dx,
+      a.align.dy,
+      a.align.scale,
+      a.drift ? `${a.drift.x},${a.drift.y}` : '',
+    )
+  }
+  const s = parts.join('|')
+  let h = 5381 // djb2
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0
+  return h.toString(16)
 }
 
 export async function saveProject(): Promise<void> {

@@ -4,6 +4,7 @@
  */
 
 import UPNG from 'upng-js'
+import type { SpriteSheet } from './types'
 
 export interface LayoutOpts {
   scale: number
@@ -67,4 +68,84 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 5000)
+}
+
+export function formatBytes(n: number): string {
+  if (n >= 1048576) return `${(n / 1048576).toFixed(1)} MB`
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`
+  return `${n} B`
+}
+
+export function slugify(name: string): string {
+  return name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') || 'sprite'
+}
+
+/** desambigua slugs repetidos com sufixo _2, _3... (consistente manifesto↔imagem) */
+export function uniqueSlug(name: string, used: Set<string>): string {
+  let s = slugify(name)
+  for (let n = 2; used.has(s); n++) s = `${slugify(name)}_${n}`
+  used.add(s)
+  return s
+}
+
+/**
+ * Manifesto JSON de um spritesheet salvo, regenerado a partir dos metadados.
+ * meta.version = 4 é a versão de FORMATO; sheet.version é a de GERAÇÃO.
+ */
+export function buildManifest(
+  projectName: string,
+  sheet: Pick<SpriteSheet, 'version' | 'createdAt' | 'cell' | 'exportCfg' | 'anims' | 'corrections'>,
+): string {
+  const pslug = slugify(projectName)
+  const animsJson: Record<string, object> = {}
+  for (const am of sheet.anims) {
+    const pad = sheet.exportCfg.padding
+    const frames = am.durationsMs.map((d, i) => {
+      const col = i % am.columns
+      const row = Math.floor(i / am.columns)
+      return {
+        name: `${am.slug}_${String(i).padStart(3, '0')}`,
+        index: i,
+        x: pad + col * (am.cellW + pad),
+        y: pad + row * (am.cellH + pad),
+        w: am.cellW,
+        h: am.cellH,
+        duration_ms: d,
+      }
+    })
+    animsJson[am.slug] = {
+      image: `${pslug}_${am.slug}.png`,
+      size: { w: am.width, h: am.height },
+      columns: am.columns,
+      rows: am.rows,
+      frameCount: am.frameCount,
+      fps: am.fps,
+      loop: true,
+      crossfade: am.crossfade,
+      frames,
+    }
+  }
+  return JSON.stringify(
+    {
+      meta: {
+        app: 'SpriteForge',
+        version: 4,
+        project: projectName,
+        format: 'RGBA8888',
+        frameSize: { w: sheet.anims[0]?.cellW ?? 0, h: sheet.anims[0]?.cellH ?? 0 },
+        pivot: { x: sheet.cell.pivotX, y: sheet.cell.pivotY },
+        margin: sheet.cell.margin,
+        scale: sheet.exportCfg.scale,
+        padding: sheet.exportCfg.padding,
+        compression: compressionLabel(sheet.exportCfg.colors),
+        generation: sheet.version,
+        generatedAt: sheet.createdAt,
+        corrections: sheet.corrections.map((c) => ({ kind: c.kind, target: c.target, params: c.params })),
+      },
+      animations: animsJson,
+    },
+    null,
+    2,
+  )
 }

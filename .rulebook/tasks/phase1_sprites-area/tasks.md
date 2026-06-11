@@ -1,9 +1,9 @@
 ## 1. Modelo de dados e persistência
 
-- [ ] 1.1 `src/types.ts`: adicionar `CorrectionKind` (union fechado das 8 categorias), `Correction` (kind, severity, target, params, accepted/adjusted), `SpriteSheetMeta`, `SpriteSheet` (id, projectId, version, createdAt, blobs por animação, metadados, correções aplicadas, staleHash) e `SpritesCfg` (limiares default); `ProjectData` ganha `spritesCfg`
-- [ ] 1.2 `src/db.ts`: bump IndexedDB para v2 com store `spritesheets` (keyPath `id`, índice `projectId`) em migração não destrutiva; CRUD `listSheets(projectId)`, `putSheet`, `deleteSheet`; captura de `QuotaExceededError` com erro tipado
-- [ ] 1.3 `src/state.ts`: backfill de `spritesCfg` em `openProjectState` (padrão de `refs`); helper de hash do estado das animações (frames/chroma/curva/seleção/align) para detecção de stale
-- [ ] 1.4 `src/export.ts`: extrair `formatBytes` para utilitário compartilhado e atualizar os consumidores (align/editor) sem duplicação
+- [x] 1.1 `src/types.ts`: adicionar `CorrectionKind` (union fechado das 8 categorias), `Correction` (kind, severity, target, params, accepted/adjusted), `SheetAnimMeta`, `SpriteSheet` (id, projectId, version, createdAt, blobs por animação, metadados, correções aplicadas, stateHash) e `SpritesCfg` (limiares default); `ProjectData` ganha `spritesCfg`
+- [x] 1.2 `src/db.ts`: bump IndexedDB para v2 com store `spritesheets` (keyPath `id`, índice `projectId`) em migração não destrutiva; CRUD `listSheets(projectId)`, `putSheet`, `deleteSheet`; captura de `QuotaExceededError` com erro tipado
+- [x] 1.3 `src/state.ts`: backfill de `spritesCfg` em `openProjectState` (padrão de `refs`); helper `animStateHash` (frames/chroma/curva/seleção/align) para detecção de stale
+- [x] 1.4 `src/export.ts`: extraídos `formatBytes`, `slugify`, `uniqueSlug` e `buildManifest` (manifesto v4) como utilitários compartilhados; consumidores atualizados
 
 ## 2. Migração da exportação (align → sprites)
 
