@@ -4,6 +4,7 @@
 
 import './style.css'
 import { initAlign } from './align'
+import { backupAvailable, deleteBackup, listBackups, restoreBackup, uploadBackup } from './backup'
 import { initGenVideo } from './genvideo'
 import { initNormalize } from './normalize'
 import { initSprites } from './sprites'
@@ -74,7 +75,48 @@ async function goHome(): Promise<void> {
   }
   projects.sort((a, b) => b.updatedAt - a.updatedAt)
 
-  if (!projects.length) {
+  // backups no servidor local que não existem neste navegador
+  const known = new Set(projects.map((p) => p.id))
+  const backups = (await listBackups()).filter((b) => !known.has(b.id))
+  for (const b of backups) {
+    const card = document.createElement('div')
+    card.className = 'proj-card backup-card'
+    const name = document.createElement('span')
+    name.className = 'pc-name'
+    name.textContent = b.name
+    const meta = document.createElement('span')
+    meta.className = 'pc-meta'
+    meta.textContent = `backup no servidor · ${new Date(b.updatedAt).toLocaleDateString('pt-BR')} · ${(b.size / 1048576).toFixed(1)} MB`
+    const restore = document.createElement('button')
+    restore.className = 'btn btn-small'
+    restore.textContent = 'RESTAURAR_'
+    restore.onclick = async () => {
+      busyShow('RESTAURANDO DO SERVIDOR...')
+      try {
+        const p = await restoreBackup(b.id)
+        toast('PROJETO RESTAURADO ✓')
+        openProject(p)
+      } catch (err) {
+        console.error(err)
+        toast('FALHA AO RESTAURAR O BACKUP', true)
+      } finally {
+        busyHide()
+      }
+    }
+    const del = document.createElement('button')
+    del.className = 'btn btn-small danger'
+    del.textContent = 'X'
+    del.title = 'excluir backup do servidor'
+    del.onclick = async () => {
+      if (!confirm(`Excluir o backup "${b.name}" do servidor?`)) return
+      await deleteBackup(b.id)
+      void goHome()
+    }
+    card.append(name, meta, restore, del)
+    listEl.append(card)
+  }
+
+  if (!projects.length && !backups.length) {
     const empty = document.createElement('div')
     empty.className = 'proj-empty'
     empty.textContent = 'nenhum projeto ainda — crie o primeiro acima'
@@ -167,6 +209,23 @@ function goProject(): void {
 
   $<HTMLButtonElement>('#btn-genvideo-proj').onclick = goGenVideo
   $<HTMLButtonElement>('#btn-sprites-proj').onclick = goSprites
+  $<HTMLButtonElement>('#btn-backup-proj').onclick = async () => {
+    if (!(await backupAvailable())) {
+      toast('SERVIDOR DE BACKUP FORA DO AR — RODE npm run dev (OU npm run server)', true)
+      return
+    }
+    busyShow('ENVIANDO BACKUP...')
+    try {
+      await saveProject()
+      await uploadBackup(p)
+      toast('BACKUP NO SERVIDOR ✓')
+    } catch (err) {
+      console.error(err)
+      toast('FALHA NO BACKUP', true)
+    } finally {
+      busyHide()
+    }
+  }
 
   hideImportPanel()
   renderRefsRow()

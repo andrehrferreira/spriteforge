@@ -7,6 +7,7 @@
 
 import { strToU8, zipSync } from 'fflate'
 import { detectAll, sampleFromCanvas, type AnimInput, type FrameSample } from './analyze'
+import { scheduleBackup } from './backup'
 import { ChromaProcessor } from './chroma'
 import { deleteSheet, listSheets, putSheet, QuotaError, uid } from './db'
 import { buildManifest, computeLayout, downloadBlob, encodeCanvas, formatBytes, MAX_SHEET_DIM, slugify, uniqueSlug } from './export'
@@ -746,6 +747,7 @@ export function initSprites(): () => void {
       await putSheet(sheet)
       sheets.push(sheet)
       renderVersions()
+      scheduleBackup(project)
       toast(`VERSÃO ${version} GERADA E SALVA ✓ ${formatBytes(total)}`)
     } catch (err) {
       console.error(err)
@@ -841,6 +843,7 @@ export function initSprites(): () => void {
         await deleteSheet(sh.id)
         sheets = sheets.filter((s2) => s2.id !== sh.id)
         renderVersions()
+        scheduleBackup(project)
       }
       row.append(zip, regen, del)
       box.append(row)

@@ -478,6 +478,9 @@ input[type="range"]::-moz-range-thumb {
 .pc-name { font-family: var(--font-pix); font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pc-meta { color: var(--dim); font-size: 12px; white-space: nowrap; }
 
+.proj-card.backup-card { border-left-color: var(--amber); }
+.proj-card.backup-card .pc-name::before { content: '⤓ '; color: var(--amber); }
+
 .proj-empty {
   text-align: center; color: var(--dim);
   padding: 34px; border: 1px dashed var(--line);

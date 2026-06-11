@@ -54,3 +54,6 @@ CLAUDE.local.md
 .rulebook/backup/
 .rulebook/handoff/_pending.md
 .rulebook/handoff/.urgent
+
+# Backups do servidor local
+data/

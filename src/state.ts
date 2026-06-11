@@ -3,6 +3,7 @@
  * (por id de animação — os bitmaps não vão para o IndexedDB).
  */
 
+import { scheduleBackup } from './backup'
 import { putProject } from './db'
 import { extractFrames, type ExtractedFrame } from './extract'
 import { defaultSpritesCfg, type AnimationData, type ProjectData } from './types'
@@ -59,6 +60,7 @@ export async function saveProject(): Promise<void> {
   if (!state.project) return
   state.project.updatedAt = Date.now()
   await putProject(state.project)
+  scheduleBackup(state.project)
 }
 
 /** Garante os frames extraídos da animação (extrai do vídeo salvo se preciso). */

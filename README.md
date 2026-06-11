@@ -13,9 +13,10 @@ Roda 100% no navegador — os vídeos e configurações ficam salvos localmente
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev      # http://localhost:5173 (vite + servidor de backup juntos)
+npm run server   # só o servidor de backup (porta 5175)
 npm run build    # gera dist/ estático
-npm test         # vitest (análise, manifesto, hash de versões)
+npm test         # vitest (análise, manifesto, backup, hash de versões)
 ```
 
 ## Fluxo
@@ -116,6 +117,21 @@ manifesto JSON único (`meta.version = 4` é a versão do formato;
 
 Todos os atlas compartilham a mesma célula e pivô — a engine pode trocar de
 animação sem o sprite "pular".
+
+## Backup no servidor local
+
+O IndexedDB morre se o cache do navegador for limpo. O `npm run dev` sobe
+junto um **servidor local de backups** (zero dependências, porta 5175) que
+guarda cada projeto como um `.sfproj` (zip com o projeto completo: vídeos,
+referências, configurações e todas as versões de spritesheet) em
+`data/backups/` no seu disco.
+
+- **Automático**: qualquer mudança salva agenda um backup (debounce de 15s).
+- **Manual**: botão BACKUP_ no dashboard do projeto.
+- **Restauração**: num navegador vazio (cache limpo, outro perfil), a tela
+  inicial lista os backups do servidor — RESTAURAR_ reconstrói o projeto
+  inteiro no IndexedDB, incluindo as versões de spritesheet.
+- Sem o servidor rodando, o app funciona normalmente (só local).
 
 ## Limites
 
