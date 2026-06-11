@@ -13,6 +13,7 @@ export const state = {
 }
 
 export function openProjectState(p: ProjectData): void {
+  if (!Array.isArray(p.refs)) p.refs = [] // projetos antigos não têm referências
   state.project = p
   state.frames.clear()
 }
@@ -31,9 +32,16 @@ export async function ensureFrames(
   const cached = state.frames.get(anim.id)
   if (cached) return cached
   const res = await extractFrames(anim.video, anim.extractFps, anim.maxDim, onProgress ?? (() => {}))
-  // reconcilia a seleção salva com a contagem extraída
+  // reconcilia a seleção e a curva salvas com a contagem extraída
   if (anim.selected.length !== res.frames.length) {
     anim.selected = res.frames.map((_, i) => anim.selected[i] ?? true)
+  }
+  const oldSpeed: number[] = anim.speed ?? [] // projetos antigos não têm a curva
+  if (oldSpeed.length !== res.frames.length) {
+    anim.speed = res.frames.map((_, i) => oldSpeed[i] ?? 1)
+  }
+  if (!Array.isArray(anim.curve) || anim.curve.length < 2) {
+    anim.curve = [{ t: 0, v: 1 }, { t: 1, v: 1 }]
   }
   state.frames.set(anim.id, res.frames)
   return res.frames

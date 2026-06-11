@@ -34,7 +34,16 @@ export function initEditor(anim: AnimationData, frames: ExtractedFrame[]): () =>
   let drawRect = { x: 0, y: 0, scale: 1 }
 
   function rebuildLoop(): void {
-    loop = createLoop(proc, selectedBitmaps(anim, frames), settings, crossfade)
+    // anti-deriva só vale para seleção contígua (é onde a medição faz sentido)
+    const contiguous =
+      selection.length > 0 && selection[selection.length - 1] - selection[0] === selection.length - 1
+    loop = createLoop(
+      proc,
+      selectedBitmaps(anim, frames),
+      settings,
+      crossfade,
+      contiguous ? anim.drift ?? null : null,
+    )
   }
 
   // ── nome da animação ────────────────────────────────────
@@ -53,6 +62,7 @@ export function initEditor(anim: AnimationData, frames: ExtractedFrame[]): () =>
     pcv.width = Math.max(1, Math.round(r.width * devicePixelRatio))
     pcv.height = Math.max(1, Math.round(r.height * devicePixelRatio))
     renderPreview()
+    resizeCurve()
   }
 
   function renderPreview(): void {
@@ -86,12 +96,19 @@ export function initEditor(anim: AnimationData, frames: ExtractedFrame[]): () =>
       currentIdx = fi
     }
     updateIndicator()
+    drawCurve()
   }
 
   function updateIndicator(): void {
     $('#frame-indicator').textContent = selection.length
       ? `· #${String(currentIdx).padStart(3, '0')} · ${loopPos + 1}/${loop.length} · t=${frames[currentIdx].time.toFixed(2)}s`
       : '· vazio'
+  }
+
+  /** duração do frame p do loop, respeitando a curva de fps */
+  function frameDur(p: number): number {
+    const oi = selection[loop.k + p]
+    return 1 / (playbackFps * (anim.speed[oi] ?? 1))
   }
 
   // loop de playback
@@ -103,12 +120,13 @@ export function initEditor(anim: AnimationData, frames: ExtractedFrame[]): () =>
     lastT = now
     if (playing && selection.length && loop.length > 1) {
       acc += dt
-      const spf = 1 / playbackFps
+      let spf = frameDur(loopPos)
       let advanced = false
       while (acc >= spf) {
         acc -= spf
         loopPos = (loopPos + 1) % loop.length
         advanced = true
+        spf = frameDur(loopPos)
       }
       if (advanced) renderPreview()
     }
@@ -153,6 +171,7 @@ export function initEditor(anim: AnimationData, frames: ExtractedFrame[]): () =>
     $('#fade-val').textContent = fadeRange.value
     loopPos = 0
     rebuildLoop()
+    bakeCurve()
     updateFadeMarkers()
     renderPreview()
   }
@@ -264,6 +283,241 @@ export function initEditor(anim: AnimationData, frames: ExtractedFrame[]): () =>
     }
   }
 
+  // ── curva de fps (pontos de controle, estilo Blender) ──
+  const MULT_MIN = 0.25
+  const MULT_MAX = 3
+  const PAD = 10 // margem interna do gráfico, em px CSS
+  const curveCv = $<HTMLCanvasElement>('#curve-canvas')
+  const curveCtx = curveCv.getContext('2d')!
+  let dragIdx = -1
+
+  function resizeCurve(): void {
+    const r = curveCv.getBoundingClientRect()
+    if (!r.width) return
+    curveCv.width = Math.max(1, Math.round(r.width * devicePixelRatio))
+    curveCv.height = Math.max(1, Math.round(r.height * devicePixelRatio))
+    drawCurve()
+  }
+
+  const padX = (): number => PAD * devicePixelRatio
+  const plotW = (): number => curveCv.width - padX() * 2
+  const plotH = (): number => curveCv.height - padX() * 2
+  const xOf = (t: number): number => padX() + t * plotW()
+  const yOf = (v: number): number =>
+    curveCv.height - padX() - ((v - MULT_MIN) / (MULT_MAX - MULT_MIN)) * plotH()
+
+  /** interpolação cúbica monotônica (Fritsch–Carlson) — suave e sem overshoot */
+  function curveSampler(pts: { t: number; v: number }[]): (x: number) => number {
+    const n = pts.length
+    if (n === 1) return () => pts[0].v
+    const dt: number[] = []
+    const m: number[] = []
+    for (let i = 0; i < n - 1; i++) {
+      const h = Math.max(1e-6, pts[i + 1].t - pts[i].t)
+      dt.push(h)
+      m.push((pts[i + 1].v - pts[i].v) / h)
+    }
+    const tang: number[] = [m[0]]
+    for (let i = 1; i < n - 1; i++) tang.push(m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2)
+    tang.push(m[n - 2])
+    for (let i = 0; i < n - 1; i++) {
+      if (m[i] === 0) {
+        tang[i] = 0
+        tang[i + 1] = 0
+      } else {
+        const a = tang[i] / m[i]
+        const b = tang[i + 1] / m[i]
+        const s = a * a + b * b
+        if (s > 9) {
+          const f = 3 / Math.sqrt(s)
+          tang[i] = f * a * m[i]
+          tang[i + 1] = f * b * m[i]
+        }
+      }
+    }
+    return (x: number): number => {
+      if (x <= pts[0].t) return pts[0].v
+      if (x >= pts[n - 1].t) return pts[n - 1].v
+      let i = 0
+      while (x > pts[i + 1].t) i++
+      const s = (x - pts[i].t) / dt[i]
+      const h00 = (1 + 2 * s) * (1 - s) * (1 - s)
+      const h10 = s * (1 - s) * (1 - s)
+      const h01 = s * s * (3 - 2 * s)
+      const h11 = s * s * (s - 1)
+      return h00 * pts[i].v + h10 * dt[i] * tang[i] + h01 * pts[i + 1].v + h11 * dt[i] * tang[i + 1]
+    }
+  }
+
+  /** amostra a curva em cada frame do loop e grava em anim.speed */
+  function bakeCurve(): void {
+    if (!selection.length) return
+    const sample = curveSampler(anim.curve)
+    const len = loop.length
+    for (let p = 0; p < len; p++) {
+      const t = len > 1 ? p / (len - 1) : 0
+      const v = Math.min(MULT_MAX, Math.max(MULT_MIN, sample(t)))
+      anim.speed[selection[loop.k + p]] = Math.round(v * 100) / 100
+    }
+  }
+
+  function drawCurve(): void {
+    const w = curveCv.width
+    const h = curveCv.height
+    curveCtx.clearRect(0, 0, w, h)
+    if (!w || !h) return
+
+    // linha de referência do 1×
+    curveCtx.strokeStyle = 'rgba(117, 137, 109, 0.45)'
+    curveCtx.setLineDash([4, 4])
+    curveCtx.beginPath()
+    curveCtx.moveTo(padX(), yOf(1))
+    curveCtx.lineTo(w - padX(), yOf(1))
+    curveCtx.stroke()
+    curveCtx.setLineDash([])
+
+    // playhead
+    if (selection.length && loop.length > 1) {
+      const t = loopPos / (loop.length - 1)
+      curveCtx.strokeStyle = 'rgba(255, 79, 216, 0.55)'
+      curveCtx.beginPath()
+      curveCtx.moveTo(xOf(t), padX() / 2)
+      curveCtx.lineTo(xOf(t), h - padX() / 2)
+      curveCtx.stroke()
+    }
+
+    // curva
+    const sample = curveSampler(anim.curve)
+    curveCtx.strokeStyle = '#52ff7a'
+    curveCtx.lineWidth = Math.max(1, 1.5 * devicePixelRatio)
+    curveCtx.beginPath()
+    const STEPS = 96
+    for (let s = 0; s <= STEPS; s++) {
+      const t = s / STEPS
+      const v = Math.min(MULT_MAX, Math.max(MULT_MIN, sample(t)))
+      if (s === 0) curveCtx.moveTo(xOf(t), yOf(v))
+      else curveCtx.lineTo(xOf(t), yOf(v))
+    }
+    curveCtx.stroke()
+    curveCtx.lineWidth = 1
+
+    // pontos de controle
+    const ps = 5 * devicePixelRatio
+    anim.curve.forEach((p, i) => {
+      curveCtx.fillStyle = i === dragIdx ? '#ff4fd8' : '#d6e8d0'
+      curveCtx.fillRect(xOf(p.t) - ps / 2, yOf(p.v) - ps / 2, ps, ps)
+      curveCtx.strokeStyle = '#06140a'
+      curveCtx.strokeRect(xOf(p.t) - ps / 2, yOf(p.v) - ps / 2, ps, ps)
+    })
+
+    // valor do ponto sendo arrastado
+    if (dragIdx >= 0) {
+      const p = anim.curve[dragIdx]
+      curveCtx.fillStyle = '#ff4fd8'
+      curveCtx.font = `${10 * devicePixelRatio}px "IBM Plex Mono", monospace`
+      curveCtx.textAlign = xOf(p.t) > w / 2 ? 'right' : 'left'
+      const tx = xOf(p.t) + (xOf(p.t) > w / 2 ? -8 : 8) * devicePixelRatio
+      curveCtx.fillText(`${p.v.toFixed(2)}×`, tx, yOf(p.v) - 6 * devicePixelRatio)
+    }
+  }
+
+  function curveHit(e: PointerEvent | MouseEvent): number {
+    const r = curveCv.getBoundingClientRect()
+    const cx = (e.clientX - r.left) * devicePixelRatio
+    const cy = (e.clientY - r.top) * devicePixelRatio
+    const radius = 9 * devicePixelRatio
+    let best = -1
+    let bestD = radius
+    anim.curve.forEach((p, i) => {
+      const d = Math.hypot(xOf(p.t) - cx, yOf(p.v) - cy)
+      if (d < bestD) {
+        bestD = d
+        best = i
+      }
+    })
+    return best
+  }
+
+  function curveCoords(e: PointerEvent): { t: number; v: number } {
+    const r = curveCv.getBoundingClientRect()
+    const cx = (e.clientX - r.left) * devicePixelRatio
+    const cy = (e.clientY - r.top) * devicePixelRatio
+    const t = Math.min(1, Math.max(0, (cx - padX()) / Math.max(1, plotW())))
+    let v = MULT_MIN + (1 - (cy - padX()) / Math.max(1, plotH())) * (MULT_MAX - MULT_MIN)
+    v = Math.min(MULT_MAX, Math.max(MULT_MIN, v))
+    if (Math.abs(v - 1) < 0.06) v = 1 // imã no 1×
+    return { t, v }
+  }
+
+  function curveChanged(): void {
+    bakeCurve()
+    drawCurve()
+  }
+
+  curveCv.onpointerdown = (e) => {
+    e.preventDefault()
+    const hit = curveHit(e)
+    if (hit >= 0) {
+      dragIdx = hit
+    } else {
+      // novo ponto na posição clicada, mantendo a ordem por t
+      const { t, v } = curveCoords(e)
+      let at = anim.curve.findIndex((p) => p.t > t)
+      if (at < 0) at = anim.curve.length - 1
+      if (at === 0) at = 1
+      anim.curve.splice(at, 0, { t, v: Math.round(v * 100) / 100 })
+      dragIdx = at
+    }
+    curveCv.setPointerCapture(e.pointerId)
+    curveChanged()
+  }
+
+  curveCv.onpointermove = (e) => {
+    if (dragIdx < 0) return
+    const { t, v } = curveCoords(e)
+    const p = anim.curve[dragIdx]
+    p.v = Math.round(v * 100) / 100
+    // extremos ficam presos em t=0 e t=1; os demais entre os vizinhos
+    if (dragIdx > 0 && dragIdx < anim.curve.length - 1) {
+      const lo = anim.curve[dragIdx - 1].t + 0.01
+      const hi = anim.curve[dragIdx + 1].t - 0.01
+      p.t = Math.min(hi, Math.max(lo, t))
+    }
+    curveChanged()
+  }
+
+  curveCv.onpointerup = () => {
+    dragIdx = -1
+    drawCurve()
+  }
+
+  function removeCurvePoint(e: MouseEvent): void {
+    const hit = curveHit(e)
+    if (hit > 0 && hit < anim.curve.length - 1) {
+      anim.curve.splice(hit, 1)
+      dragIdx = -1
+      curveChanged()
+    }
+  }
+  curveCv.ondblclick = removeCurvePoint
+  curveCv.oncontextmenu = (e) => {
+    e.preventDefault()
+    removeCurvePoint(e)
+  }
+
+  $('#curve-reset').onclick = () => {
+    anim.curve = [{ t: 0, v: 1 }, { t: 1, v: 1 }]
+    curveChanged()
+  }
+  document.querySelectorAll<HTMLButtonElement>('[data-curve]').forEach((btn) => {
+    btn.onclick = () => {
+      if (btn.dataset.curve === 'in') anim.curve = [{ t: 0, v: 0.5 }, { t: 1, v: 2 }]
+      else if (btn.dataset.curve === 'out') anim.curve = [{ t: 0, v: 2 }, { t: 1, v: 0.5 }]
+      else anim.curve = [{ t: 0, v: 0.5 }, { t: 0.5, v: 2 }, { t: 1, v: 0.5 }]
+      curveChanged()
+    }
+  })
+
   // ── grade de frames ─────────────────────────────────────
   const grid = $('#frames-grid')
   grid.innerHTML = ''
@@ -298,12 +552,13 @@ export function initEditor(anim: AnimationData, frames: ExtractedFrame[]): () =>
       anim.selected[i] = !anim.selected[i]
       lastClicked = i
     }
+    anim.drift = null // a medição da deriva era do corte automático
     onSelectionChange()
   }
 
-  $('#btn-all').onclick = () => { anim.selected = anim.selected.map(() => true); onSelectionChange() }
-  $('#btn-none').onclick = () => { anim.selected = anim.selected.map(() => false); onSelectionChange() }
-  $('#btn-invert').onclick = () => { anim.selected = anim.selected.map((s) => !s); onSelectionChange() }
+  $('#btn-all').onclick = () => { anim.selected = anim.selected.map(() => true); anim.drift = null; onSelectionChange() }
+  $('#btn-none').onclick = () => { anim.selected = anim.selected.map(() => false); anim.drift = null; onSelectionChange() }
+  $('#btn-invert').onclick = () => { anim.selected = anim.selected.map((s) => !s); anim.drift = null; onSelectionChange() }
 
   // ── detecção automática do loop perfeito ────────────────
   const autoloopBtn = $<HTMLButtonElement>('#btn-autoloop')
@@ -329,18 +584,44 @@ export function initEditor(anim: AnimationData, frames: ExtractedFrame[]): () =>
     autoloopBtn.disabled = true
     setPlaying(false)
     try {
-      // 1) descritor compacto de cada frame já processado pelo chroma
+      // 1) centroide + descritor compacto de cada frame processado.
+      //    O descritor é centralizado pelo centroide: a comparação fica
+      //    imune à deriva de posição do personagem ao longo do vídeo.
       const DW = 20
       const DH = 20
       const dcv = document.createElement('canvas')
       dcv.width = DW
       dcv.height = DH
       const dctx = dcv.getContext('2d', { willReadFrequently: true })!
+      const tw = frames[first].thumb.width
+      const th = frames[first].thumb.height
+      const tcv = document.createElement('canvas')
+      tcv.width = tw
+      tcv.height = th
+      const tctx = tcv.getContext('2d', { willReadFrequently: true })!
       const desc: Float32Array[] = []
+      const cents: { x: number; y: number; m: number }[] = []
       for (let k = 0; k < n; k++) {
         const out = proc.render(frames[first + k].thumb, settings)
+        tctx.clearRect(0, 0, tw, th)
+        tctx.drawImage(out, 0, 0)
+        const td = tctx.getImageData(0, 0, tw, th).data
+        let sm = 0, sx = 0, sy = 0
+        for (let y = 0; y < th; y++) {
+          for (let x = 0; x < tw; x++) {
+            const a = td[(y * tw + x) * 4 + 3]
+            if (a > 16) {
+              sm += a
+              sx += a * x
+              sy += a * y
+            }
+          }
+        }
+        const c = sm ? { x: sx / sm, y: sy / sm, m: sm } : { x: tw / 2, y: th / 2, m: 0 }
+        cents.push(c)
+
         dctx.clearRect(0, 0, DW, DH)
-        dctx.drawImage(out, 0, 0, DW, DH)
+        dctx.drawImage(tcv, (tw / 2 - c.x) * (DW / tw), (th / 2 - c.y) * (DH / th), DW, DH)
         const d = dctx.getImageData(0, 0, DW, DH).data
         const v = new Float32Array(DW * DH * 4)
         for (let i = 0, p = 0; i < d.length; i += 4) {
@@ -380,24 +661,111 @@ export function initEditor(anim: AnimationData, frames: ExtractedFrame[]): () =>
         }
       }
 
-      // 3) entre os cortes quase tão bons quanto o melhor, fica com o loop mais longo
+      // 3) refina os melhores candidatos em 48×48: o descritor pequeno
+      //    confunde poses espelhadas (perna esquerda vs direita à frente);
+      //    em alta resolução o sombreamento separa as duas fases da passada
       cands.sort((a, b) => a.d - b.d)
-      const tol = cands[0].d * 1.5 + 0.008
-      let pick = cands[0]
-      for (const c of cands) {
+      autoloopBtn.textContent = 'REFINANDO...'
+      await new Promise(requestAnimationFrame)
+      const RW = 48
+      const RH = 48
+      const rcv = document.createElement('canvas')
+      rcv.width = RW
+      rcv.height = RH
+      const rctx = rcv.getContext('2d', { willReadFrequently: true })!
+      const fine = new Map<number, Float32Array>()
+      const fineDesc = (q: number): Float32Array => {
+        let v = fine.get(q)
+        if (v) return v
+        const out = proc.render(frames[first + q].thumb, settings)
+        const c = cents[q]
+        rctx.clearRect(0, 0, RW, RH)
+        rctx.drawImage(out, (tw / 2 - c.x) * (RW / tw), (th / 2 - c.y) * (RH / th), RW, RH)
+        const d = rctx.getImageData(0, 0, RW, RH).data
+        v = new Float32Array(RW * RH * 4)
+        for (let i = 0, p = 0; i < d.length; i += 4) {
+          const a = d[i + 3] / 255
+          v[p++] = d[i] * a
+          v[p++] = d[i + 1] * a
+          v[p++] = d[i + 2] * a
+          v[p++] = d[i + 3]
+        }
+        fine.set(q, v)
+        return v
+      }
+      const refined: { i: number; j: number; d: number }[] = []
+      const TOP = Math.min(64, cands.length)
+      for (let c = 0; c < TOP; c++) {
+        const { i, j } = cands[c]
+        let d = dist(fineDesc(i), fineDesc(j))
+        d = j + 1 < n ? d + dist(fineDesc(i + 1), fineDesc(j + 1)) : d * 2
+        refined.push({ i, j, d })
+        if (c % 16 === 15) {
+          await new Promise(requestAnimationFrame)
+          if (!alive) return
+        }
+      }
+      refined.sort((a, b) => a.d - b.d)
+      const tol = refined[0].d * 1.25 + 0.004
+      let pick = refined[0]
+      for (const c of refined) {
         if (c.d > tol) break
         if (c.j - c.i > pick.j - pick.i) pick = c
       }
 
+      // 4) se mesmo o melhor corte ainda difere (vídeo de IA nunca repete o
+      //    ciclo exatamente), liga o crossfade automaticamente para fundir
+      //    a emenda
+      const quality = (pick.d / 2) * 100
+      let autoFade = false
+      if (crossfade === 0 && quality > 3) {
+        crossfade = 3
+        anim.crossfade = 3
+        fadeRange.value = '3'
+        $('#fade-val').textContent = '3'
+        autoFade = true
+      }
+
       const a0 = first + pick.i
-      const b0 = first + pick.j - 1
+      // com crossfade ativo, estende a seleção em K frames além do ponto de
+      // corte: a fusão consome os K primeiros e os pares tail/head ficam
+      // alinhados no período certo (sem fantasma duplo na emenda)
+      const extend = Math.min(crossfade, last - (first + pick.j - 1))
+      const b0 = first + pick.j - 1 + extend
       anim.selected = anim.selected.map((_, k) => k >= a0 && k <= b0)
+
+      // 4) mede a deriva de posição entre os frames gêmeos do corte —
+      //    a composição do loop distribui a correção inversa pelos frames
+      let driftMag = 0
+      anim.drift = null
+      {
+        let dx = 0, dy = 0, cnt = 0
+        for (let t = 0; t < 3; t++) {
+          const ca = cents[pick.i + t]
+          const cb = cents[pick.j + t]
+          if (!ca || !cb || !ca.m || !cb.m) break
+          dx += cb.x - ca.x
+          dy += cb.y - ca.y
+          cnt++
+        }
+        if (cnt) {
+          const up = frames[first].full.width / tw
+          const fx = ((dx / cnt) * up)
+          const fy = ((dy / cnt) * up)
+          driftMag = Math.hypot(fx, fy)
+          if (driftMag >= 0.75) {
+            anim.drift = { x: Math.round(fx * 10) / 10, y: Math.round(fy * 10) / 10 }
+          }
+        }
+      }
+
       onSelectionChange()
       const cut = n - (pick.j - pick.i)
-      const quality = (pick.d / 2) * 100
       toast(
         `LOOP FECHADO: #${String(a0).padStart(3, '0')}–#${String(b0).padStart(3, '0')} · ${cut} FRAMES IGNORADOS · Δ${quality.toFixed(1)}%` +
-        (quality > 6 ? ' — EMENDA AINDA DIFERE, COMBINE COM CROSSFADE' : ''),
+        (anim.drift ? ` · DERIVA DE ${driftMag.toFixed(1)}PX CORRIGIDA` : '') +
+        (autoFade ? ' · CROSSFADE 3 ATIVADO' : '') +
+        (quality > 6 && !autoFade ? ' — AUMENTE O CROSSFADE PARA FUNDIR A EMENDA' : ''),
       )
     } finally {
       autoloopBtn.disabled = false
@@ -413,6 +781,7 @@ export function initEditor(anim: AnimationData, frames: ExtractedFrame[]): () =>
     })
     loopPos = 0
     rebuildLoop()
+    bakeCurve()
     $('#sel-count').textContent = `· ${selection.length}/${frames.length} no loop`
     updateFadeMarkers()
     renderPreview()

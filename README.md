@@ -28,8 +28,11 @@ npm run build    # gera dist/ estático
      suavização, anti-reflexo e remoção de halo. Tudo em tempo real na GPU.
    - *Frames*: clique inclui/exclui do loop, shift+clique seleciona intervalo.
    - *LOOPING (auto)*: analisa os frames e encontra o melhor par início/fim
-     (semelhança visual + coerência de movimento), ignorando automaticamente
-     os frames que impedem o loop de fechar perfeito.
+     (semelhança de pose com compensação de translação + coerência de
+     movimento), ignorando os frames que impedem o loop de fechar. Também
+     mede a deriva de posição do personagem ao longo do ciclo e distribui a
+     correção inversa pelos frames — o último emenda exatamente no primeiro,
+     sem o "pulo" típico de vídeo gerado por IA.
    - *Crossfade*: funde o fim do loop com o início para eliminar o salto da
      emenda (frames consumidos ficam marcados em âmbar).
    - *Preview*: play/pause (espaço), passo a passo (←/→), FPS, zoom, fundos.
@@ -41,6 +44,27 @@ npm run build    # gera dist/ estático
      outra animação sobreposto para comparar.
    - Exporta o atlas: escala global, padding, colunas e compactação PNG
      (paleta 256/128/64 cores via UPNG.js, sem perda, ou nativo).
+
+## Geração de vídeo (OpenRouter)
+
+Dentro do projeto, a tela **GERAR VÍDEO_** usa o `x-ai/grok-imagine-video`
+via OpenRouter: as imagens de referência ficam salvas no projeto (painel
+REFERÊNCIAS do dashboard), você clica para escolher quais entram (até 7),
+escreve o mini prompt da ação e o sistema anexa as diretrizes fixas de
+sprite sheet (fundo #00b140, câmera fixa, pivô fixo, looping etc. —
+editáveis). Config: 1:1, 480p, 2–6s, sem áudio (~$0.05/s). O job roda
+assíncrono com polling; ao terminar dá para baixar o MP4 ou clicar
+**USAR NO PROJETO_** para importá-lo direto como animação. A API key fica
+no localStorage do navegador.
+
+## Normalizador de referências
+
+Ferramenta avulsa (na tela inicial) para padronizar imagens de referência
+antes de gerar os vídeos: envie várias imagens, o fundo é removido (chroma na
+GPU com cor detectada por imagem, ou alpha existente), os pés de todas são
+alinhados no mesmo pivô (base central, com a "linha do chão" configurável),
+ajuste manual de Y/escala por imagem, "igualar alturas" em um clique, e
+exportação de todas no mesmo tamanho com fundo chroma padrão `#00b140`.
 
 ## Formato da exportação
 

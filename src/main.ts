@@ -4,6 +4,8 @@
 
 import './style.css'
 import { initAlign } from './align'
+import { initGenVideo } from './genvideo'
+import { initNormalize } from './normalize'
 import { DEFAULT_SETTINGS } from './chroma'
 import { deleteProject, listProjects, putProject, uid } from './db'
 import { autoKey, initEditor } from './editor'
@@ -15,16 +17,16 @@ import { newProject, type AnimationData, type ProjectData } from './types'
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T =>
   document.querySelector(sel) as T
 
-type Screen = 'home' | 'project' | 'editor' | 'align'
+type Screen = 'home' | 'project' | 'editor' | 'align' | 'normalize' | 'genvideo'
 let cleanup: (() => void) | null = null
 
 function show(screen: Screen): void {
   cleanup?.()
   cleanup = null
-  for (const s of ['home', 'project', 'editor', 'align'] as const) {
+  for (const s of ['home', 'project', 'editor', 'align', 'normalize', 'genvideo'] as const) {
     $(`#screen-${s}`).classList.toggle('hidden', s !== screen)
   }
-  document.body.classList.toggle('in-editor', screen === 'editor' || screen === 'align')
+  document.body.classList.toggle('in-editor', screen !== 'home' && screen !== 'project')
 }
 
 function crumb(text: string): void {
@@ -124,6 +126,13 @@ $<HTMLInputElement>('#new-proj-name').onkeydown = (e) => {
   if (e.code === 'Enter') $('#btn-create').click()
 }
 
+$<HTMLButtonElement>('#btn-normalize').onclick = () => {
+  show('normalize')
+  crumb('normalizador de referências')
+  setNav('← INÍCIO', () => void goHome())
+  cleanup = initNormalize()
+}
+
 function openProject(p: ProjectData): void {
   openProjectState(p)
   goProject()
@@ -155,8 +164,76 @@ function goProject(): void {
     goAlign()
   }
 
+  $<HTMLButtonElement>('#btn-genvideo-proj').onclick = goGenVideo
+
   hideImportPanel()
+  renderRefsRow()
   renderAnimGrid()
+}
+
+// ── referências do projeto ────────────────────────────────
+
+function renderRefsRow(): void {
+  const p = state.project!
+  const row = $('#refs-row')
+  row.innerHTML = ''
+  $('#refs-count').textContent = p.refs.length ? `· ${p.refs.length}` : ''
+  if (!p.refs.length) {
+    const hint = document.createElement('span')
+    hint.className = 'dim refs-empty'
+    hint.textContent =
+      'adicione imagens do personagem — ficam salvas no projeto e alimentam o gerador de vídeo'
+    row.append(hint)
+    return
+  }
+  for (const ref of p.refs) {
+    const cell = document.createElement('div')
+    cell.className = 'ref-cell'
+    const img = document.createElement('img')
+    img.src = URL.createObjectURL(ref.blob)
+    img.onload = () => URL.revokeObjectURL(img.src)
+    img.title = ref.name
+    const del = document.createElement('button')
+    del.className = 'ref-del'
+    del.textContent = '×'
+    del.title = 'remover referência'
+    del.onclick = async () => {
+      p.refs = p.refs.filter((r) => r.id !== ref.id)
+      await saveProject()
+      renderRefsRow()
+    }
+    cell.append(img, del)
+    row.append(cell)
+  }
+}
+
+const refFileInput = $<HTMLInputElement>('#ref-files')
+$('#btn-add-ref').onclick = () => refFileInput.click()
+refFileInput.onchange = () => {
+  if (refFileInput.files?.length) void addRefFiles(Array.from(refFileInput.files))
+  refFileInput.value = ''
+}
+$('#refs-row').ondragover = (e) => e.preventDefault()
+$('#refs-row').ondrop = (e) => {
+  e.preventDefault()
+  if (e.dataTransfer?.files?.length) void addRefFiles(Array.from(e.dataTransfer.files))
+}
+
+async function addRefFiles(files: File[]): Promise<void> {
+  const p = state.project
+  if (!p) return
+  let added = 0
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue
+    p.refs.push({ id: uid(), name: f.name, blob: f })
+    added++
+  }
+  if (!added) {
+    toast('NENHUMA IMAGEM VÁLIDA', true)
+    return
+  }
+  await saveProject()
+  renderRefsRow()
 }
 
 function renderAnimGrid(): void {
@@ -320,6 +397,8 @@ $<HTMLButtonElement>('#btn-extract').onclick = async () => {
       maxDim,
       chroma: { ...DEFAULT_SETTINGS, key: autoKey(result.frames[0].full) },
       selected: result.frames.map(() => true),
+      speed: result.frames.map(() => 1),
+      curve: [{ t: 0, v: 1 }, { t: 1, v: 1 }],
       crossfade: 0,
       fps,
       align: { dx: 0, dy: 0, scale: 1 },
@@ -376,6 +455,24 @@ async function goEditor(anim: AnimationData): Promise<void> {
   } finally {
     busyHide()
   }
+}
+
+// ════ GERADOR DE VÍDEO ═══════════════════════════════════
+
+function goGenVideo(): void {
+  const p = state.project!
+  show('genvideo')
+  crumb(`${p.name} / gerar vídeo`)
+  setNav('← VOLTAR', () => {
+    void saveProject()
+    goProject()
+  })
+  cleanup = initGenVideo({
+    onUse: (file) => {
+      goProject()
+      void chooseFile(file)
+    },
+  })
 }
 
 // ════ ALINHAMENTO ════════════════════════════════════════

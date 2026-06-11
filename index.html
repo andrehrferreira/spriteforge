@@ -37,17 +37,125 @@
       </div>
     </div>
 
+    <div class="panel new-proj tool-panel">
+      <span class="field-label">FERRAMENTAS</span>
+      <div class="cfg-row tool-row">
+        <span class="tool-desc dim">normalizar imagens de referência — pés no mesmo pivô, centralizadas, fundo chroma #00b140</span>
+        <button id="btn-normalize" class="btn">NORMALIZADOR_</button>
+      </div>
+    </div>
+
     <div id="project-list" class="proj-list"></div>
+  </main>
+
+  <!-- ════ TELA: NORMALIZADOR DE REFERÊNCIAS ════ -->
+  <main id="screen-normalize" class="screen editor hidden">
+    <div class="align-grid">
+
+      <section class="panel align-preview-panel">
+        <div class="panel-title">NORMALIZADOR <span id="norm-info" class="dim"></span></div>
+        <div id="norm-tabs" class="chip-row"></div>
+        <div id="norm-wrap" class="preview-wrap align-wrap">
+          <canvas id="norm-canvas"></canvas>
+        </div>
+        <div class="preview-controls">
+          <button id="norm-add" class="btn">+ IMAGENS</button>
+          <input type="file" id="norm-files" accept="image/*" multiple hidden />
+          <span class="dim cell-info">arraste imagens aqui &middot; linha magenta = chão &middot; arraste no preview para ajustar o Y</span>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <div class="panel-title">SAÍDA</div>
+          <div class="cfg-row tight">
+            <label class="field">
+              <span class="field-label">LARGURA</span>
+              <input type="number" id="nout-w" class="text-input" min="32" max="8192" />
+            </label>
+            <label class="field">
+              <span class="field-label">ALTURA</span>
+              <input type="number" id="nout-h" class="text-input" min="32" max="8192" />
+            </label>
+            <label class="field">
+              <span class="field-label">CHÃO (PX)</span>
+              <input type="number" id="nout-ground" class="text-input" min="0" max="512" />
+            </label>
+          </div>
+          <div class="cfg-row tight" style="margin-top: 10px; align-items: center">
+            <button id="btn-nauto" class="btn btn-small" title="ajusta a saída ao conteúdo das imagens">AUTO</button>
+            <label class="field" style="flex: 1">
+              <span class="field-label">COR DE FUNDO</span>
+              <input type="color" id="nout-bg" class="bg-color-input" value="#00b140" />
+            </label>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">REMOÇÃO DE FUNDO</div>
+          <div class="frames-hint dim">fundo sólido (preto etc.): só remove o que toca as bordas — escuros internos do personagem ficam intactos</div>
+          <label class="field">
+            <span class="field-label">MODO</span>
+            <select id="n-mode">
+              <option value="auto" selected>auto (detecta por imagem)</option>
+              <option value="flood">fundo sólido (preto/branco)</option>
+              <option value="chroma">chroma (fundo colorido)</option>
+              <option value="none">usar alpha da imagem</option>
+            </select>
+          </label>
+          <label class="slider-field" style="margin-top: 12px">
+            <span class="sf-head">TOLERÂNCIA <span class="value" id="n-tol-val">14</span></span>
+            <input type="range" id="n-tol" min="0" max="300" value="14" />
+          </label>
+          <label class="slider-field">
+            <span class="sf-head">BORDA SUAVE <span class="value" id="n-feather-val">3</span></span>
+            <input type="range" id="n-feather" min="0" max="40" value="3" />
+          </label>
+          <label class="slider-field">
+            <span class="sf-head">SIMILARIDADE (CHROMA) <span class="value" id="n-sim-val">48</span></span>
+            <input type="range" id="n-sim" min="0" max="1000" value="48" />
+          </label>
+          <label class="slider-field">
+            <span class="sf-head">SUAVIZAÇÃO (CHROMA) <span class="value" id="n-smooth-val">470</span></span>
+            <input type="range" id="n-smooth" min="1" max="1000" value="470" />
+          </label>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">IMAGENS</div>
+          <div class="frames-hint dim">Y move em px (positivo = desce) &middot; ESC redimensiona</div>
+          <div id="norm-rows" class="align-rows"></div>
+          <button id="btn-equalize" class="btn btn-small btn-block" title="iguala a altura do conteúdo de todas pela primeira imagem">IGUALAR ALTURAS</button>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">EXPORTAR</div>
+          <button id="btn-norm-export" class="btn btn-primary btn-block">EXPORTAR IMAGENS_</button>
+        </section>
+      </aside>
+
+    </div>
   </main>
 
   <!-- ════ TELA: PROJETO (animações) ════ -->
   <main id="screen-project" class="screen project hidden">
     <div class="proj-head">
       <input id="proj-title" class="proj-title" spellcheck="false" title="nome do projeto" />
+      <button id="btn-genvideo-proj" class="btn">GERAR VÍDEO_</button>
       <button id="btn-align" class="btn btn-primary">ALINHAR &amp; EXPORTAR_</button>
     </div>
 
     <input type="file" id="anim-file" accept="video/*" hidden />
+
+    <div class="panel refs-panel">
+      <div class="panel-title">REFERÊNCIAS <span id="refs-count" class="dim"></span>
+        <div class="title-actions">
+          <button id="btn-add-ref" class="btn btn-small">+ IMAGENS</button>
+        </div>
+      </div>
+      <input type="file" id="ref-files" accept="image/*" multiple hidden />
+      <div id="refs-row" class="refs-row"></div>
+    </div>
 
     <div id="import-panel" class="panel import-panel hidden">
       <div class="file-card">
@@ -184,6 +292,18 @@
             <input type="range" id="halo-range" min="0" max="1000" value="312" />
           </label>
         </section>
+
+        <section class="panel">
+          <div class="panel-title">CURVA DE FPS</div>
+          <div class="frames-hint dim">clique = novo ponto &middot; arraste = mover &middot; duplo clique/botão direito = remover &middot; cima = mais rápido</div>
+          <canvas id="curve-canvas" class="curve-canvas"></canvas>
+          <div class="chip-row curve-presets">
+            <button class="chip" id="curve-reset" title="velocidade constante">1&times;</button>
+            <button class="chip" data-curve="in" title="começa lento, termina rápido">ACELERA</button>
+            <button class="chip" data-curve="out" title="começa rápido, termina lento">DESACELERA</button>
+            <button class="chip" data-curve="mid" title="lento nas pontas, rápido no meio">PICO</button>
+          </div>
+        </section>
       </aside>
 
     </div>
@@ -272,6 +392,106 @@
           </label>
           <div id="align-summary" class="exp-summary dim"></div>
           <button id="btn-export-all" class="btn btn-primary btn-block">EXPORTAR TUDO_</button>
+        </section>
+      </aside>
+
+    </div>
+  </main>
+
+  <!-- ════ TELA: GERADOR DE VÍDEO ════ -->
+  <main id="screen-genvideo" class="screen editor hidden">
+    <div class="align-grid">
+
+      <section class="panel align-preview-panel">
+        <div class="panel-title">GERADOR DE VÍDEO <span id="gv-status" class="dim"></span>
+          <div class="title-actions">
+            <button id="gv-add" class="btn btn-small" title="adiciona imagens às referências do projeto">+ REFERÊNCIA</button>
+          </div>
+        </div>
+        <input type="file" id="gv-files" accept="image/*" multiple hidden />
+        <div class="frames-hint dim">clique nas referências do projeto para incluir/excluir da geração · <span id="gv-refs-count">0/7</span> selecionadas</div>
+        <div id="gv-refs" class="gv-refs"></div>
+        <div class="preview-wrap bg-dark gv-wrap">
+          <video id="gv-video" class="hidden" controls loop muted playsinline></video>
+          <div id="gv-loading" class="gv-loading hidden">
+            <div class="invader-wrap" aria-hidden="true">
+              <div class="invader frame-a"></div>
+              <div class="invader frame-b"></div>
+            </div>
+            <div class="gv-loading-label">GERANDO VÍDEO</div>
+            <div class="progress-track"><div class="progress-bar" style="width: 100%"></div></div>
+            <div id="gv-loading-time" class="dim">0s</div>
+          </div>
+        </div>
+        <div class="preview-controls">
+          <button id="btn-gv-download" class="btn" disabled>BAIXAR MP4_</button>
+          <button id="btn-gv-use" class="btn btn-primary" disabled title="importa o vídeo como animação do projeto aberto">USAR NO PROJETO_</button>
+          <span id="gv-cost" class="dim cell-info"></span>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <div class="panel-title">OPENROUTER</div>
+          <label class="field">
+            <span class="field-label">API KEY</span>
+            <div class="cfg-row tight">
+              <input type="password" id="gv-key" class="text-input" placeholder="sk-or-v1-..." spellcheck="false" autocomplete="off" style="flex: 1" />
+              <button id="gv-test" class="btn btn-small" title="valida a chave no OpenRouter">TESTAR</button>
+            </div>
+          </label>
+          <label class="field" style="margin-top: 10px">
+            <span class="field-label">MODELO</span>
+            <input type="text" id="gv-model" class="text-input" spellcheck="false" />
+          </label>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">GERAÇÃO</div>
+          <label class="field">
+            <span class="field-label">PROMPT (A AÇÃO DA ANIMAÇÃO)</span>
+            <textarea id="gv-prompt" class="text-input text-area" rows="3" spellcheck="false" placeholder="ex: a maga corre no lugar, vista lateral, cabelo e capa balançando"></textarea>
+          </label>
+          <div class="cfg-row tight" style="margin-top: 10px">
+            <label class="field">
+              <span class="field-label">DURAÇÃO</span>
+              <select id="gv-duration">
+                <option value="2">2 s</option>
+                <option value="3">3 s</option>
+                <option value="4" selected>4 s</option>
+                <option value="5">5 s</option>
+                <option value="6">6 s</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">FORMATO</span>
+              <span class="text-input fixed-info">1:1 · 480p · sem áudio</span>
+            </label>
+          </div>
+          <label class="field" style="margin-top: 10px">
+            <span class="field-label">USO DAS IMAGENS</span>
+            <select id="gv-imgmode" title="como as imagens selecionadas são enviadas ao modelo">
+              <option value="first" selected>frame inicial — anima só a 1ª selecionada (recomendado)</option>
+              <option value="refs">referências de estilo (até 7, sem frame inicial)</option>
+            </select>
+          </label>
+          <label class="check-row" style="margin-top: 12px">
+            <input type="checkbox" id="gv-loop" checked />
+            <span>animação em looping (termina no frame inicial)</span>
+          </label>
+          <label class="field" style="margin-top: 12px">
+            <span class="field-label">DIRETRIZES (ANEXADAS AO PROMPT)
+              <button id="gv-dir-reset" class="btn btn-small" style="float: right" title="volta ao texto padrão">PADRÃO</button>
+            </span>
+            <textarea id="gv-directives" class="text-input text-area" rows="9" spellcheck="false"></textarea>
+          </label>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">EXECUTAR</div>
+          <div id="gv-estimate" class="dim" style="font-size: 11px; margin-bottom: 10px"></div>
+          <button id="btn-generate" class="btn btn-primary btn-block">GERAR VÍDEO_</button>
+          <div class="frames-hint dim" style="margin-top: 10px">a geração leva de 30s a alguns minutos — não saia desta tela enquanto roda</div>
         </section>
       </aside>
 

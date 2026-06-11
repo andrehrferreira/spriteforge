@@ -27,6 +27,8 @@ export function initAlign(): () => void {
   let preparing = false
   const bounds = new Map<string, Bounds | null>()
   const loops = new Map<string, Loop>()
+  /** índice original (na extração) de cada posição da seleção, por animação */
+  const selIdxs = new Map<string, number[]>()
   let currentId: string | null = project.animations[0]?.id ?? null
   let ghostId: string | null = null
   let playing = true
@@ -101,7 +103,10 @@ export function initAlign(): () => void {
           status(`EXTRAINDO ${a.name} ${d}/${t} (${i + 1}/${anims.length})`))
         if (!alive) return
         const sel = selectedBitmaps(a, frames)
-        loops.set(a.id, createLoop(proc, sel, a.chroma, a.crossfade))
+        const si = a.selected.flatMap((s, idx) => (s ? [idx] : []))
+        selIdxs.set(a.id, si)
+        const contiguous = si.length > 0 && si[si.length - 1] - si[0] === si.length - 1
+        loops.set(a.id, createLoop(proc, sel, a.chroma, a.crossfade, contiguous ? a.drift ?? null : null))
         if (!recomputeOnly || !bounds.has(a.id)) {
           status(`ANALISANDO ${a.name} (${i + 1}/${anims.length})`)
           bounds.set(a.id, await computeBounds(a, sel))
@@ -237,17 +242,20 @@ export function initAlign(): () => void {
     const loop = cur ? loops.get(cur.id) : null
     if (ready && playing && cur && loop && loop.length > 1) {
       acc += dt
-      const spf = 1 / cur.fps
+      const si = selIdxs.get(cur.id)
+      const dur = (p: number): number => {
+        const m = si ? cur.speed[si[loop.k + (p % loop.length)]] ?? 1 : 1
+        return 1 / (cur.fps * m)
+      }
+      let spf = dur(loopPos)
       let advanced = false
       while (acc >= spf) {
         acc -= spf
-        loopPos++
+        loopPos = (loopPos + 1) % loop.length
         advanced = true
+        spf = dur(loopPos)
       }
-      if (advanced) {
-        loopPos %= loop.length
-        renderAlign()
-      }
+      if (advanced) renderAlign()
     }
     requestAnimationFrame(tick)
   }
@@ -548,6 +556,7 @@ export function initAlign(): () => void {
     const b = bounds.get(a.id)!
     const s = a.align.scale
     const { ax, ay } = anchor(a, b)
+    const si = selIdxs.get(a.id)
     const frames: object[] = []
 
     for (let p = 0; p < loop.length; p++) {
@@ -567,11 +576,12 @@ export function initAlign(): () => void {
       const x = pad + col * (cellW + pad)
       const y = pad + row * (cellH + pad)
       atx.drawImage(cellCv, x, y)
+      const mult = si ? a.speed[si[loop.k + p]] ?? 1 : 1
       frames.push({
         name: `${aslug}_${String(p).padStart(3, '0')}`,
         index: p,
         x, y, w: cellW, h: cellH,
-        duration_ms: Math.round(1000 / a.fps),
+        duration_ms: Math.round(1000 / (a.fps * mult)),
       })
       if (p % 8 === 7) await new Promise((r) => setTimeout(r, 0))
     }

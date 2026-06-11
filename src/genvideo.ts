@@ -1,0 +1,452 @@
+/**
+ * Gerador de vídeo via OpenRouter (grok-imagine-video): seleciona imagens
+ * de referência salvas no projeto, monta o prompt com as diretrizes de
+ * sprite sheet, faz polling do job e devolve o vídeo para baixar ou
+ * importar direto como animação.
+ */
+
+import { uid } from './db'
+import { downloadBlob } from './export'
+import { saveProject, state } from './state'
+import { toast } from './toast'
+
+const $ = <T extends HTMLElement = HTMLElement>(sel: string): T =>
+  document.querySelector(sel) as T
+
+const API_BASE = 'https://openrouter.ai/api/v1/videos'
+const KEY_INFO_URL = 'https://openrouter.ai/api/v1/key'
+const DEFAULT_MODEL = 'x-ai/grok-imagine-video'
+const MAX_REFS = 7
+const COST_PER_SECOND = 0.05
+
+const LS = {
+  key: 'sf-or-key',
+  model: 'sf-or-model',
+  prompt: 'sf-gv-prompt',
+  directives: 'sf-gv-directives2', // v2: regras reescritas como restrições positivas
+  duration: 'sf-gv-duration',
+  loop: 'sf-gv-loop',
+  imgmode: 'sf-gv-imgmode',
+}
+
+const DEFAULT_DIRECTIVES = `vídeo para geração de sprite sheet de jogo
+fundo de cor sólida fixa #00b140, uniforme, sem degradê e sem sombras
+sem áudio
+animação simples e contida
+o personagem permanece exatamente no mesmo lugar (pivô fixo), sem se deslocar pelo quadro
+a cabeça e o rosto ficam TRAVADOS na mesma direção da imagem de referência, do primeiro ao último frame
+o personagem mantém o olhar fixo nessa direção o tempo inteiro: a cabeça permanece em perfil, sem virar para a câmera e sem mudar o ângulo
+armas e membros permanecem dentro da área do frame durante todo o vídeo
+a arma permanece na mesma mão do início ao fim
+sequência de movimento coesa e contínua
+câmera 100% estática e travada: sem zoom, sem pan, sem cortes, sem mudança de enquadramento`
+
+const LOOP_LINE =
+  'a animação é em looping: o último frame precisa terminar exatamente igual ao primeiro frame'
+
+export function initGenVideo(opts: { onUse: (file: File) => void }): () => void {
+  const project = state.project!
+  let alive = true
+  let running = false
+  let cancelled = false
+  let resultBlob: Blob | null = null
+  let resultUrl: string | null = null
+  let elapsedTimer = 0
+
+  // seleção de referências (ids) — começa com as primeiras 7 do projeto
+  const selected = new Set<string>()
+  project.refs.slice(0, MAX_REFS).forEach((r) => selected.add(r.id))
+  const urlMap = new Map<string, string>()
+
+  function refUrl(id: string, blob: Blob): string {
+    let u = urlMap.get(id)
+    if (!u) {
+      u = URL.createObjectURL(blob)
+      urlMap.set(id, u)
+    }
+    return u
+  }
+
+  // ── campos persistidos ──────────────────────────────────
+  const keyInput = $<HTMLInputElement>('#gv-key')
+  const modelInput = $<HTMLInputElement>('#gv-model')
+  const promptInput = $<HTMLTextAreaElement>('#gv-prompt')
+  const directivesInput = $<HTMLTextAreaElement>('#gv-directives')
+  const durationSelect = $<HTMLSelectElement>('#gv-duration')
+  const loopToggle = $<HTMLInputElement>('#gv-loop')
+  const imgModeSelect = $<HTMLSelectElement>('#gv-imgmode')
+
+  /** chave saneada: remove espaços, quebras de linha e aspas de cópia/cola */
+  function cleanKey(): string {
+    return keyInput.value.replace(/["'\s]+/g, '')
+  }
+
+  function authHeaders(): Record<string, string> {
+    return {
+      Authorization: `Bearer ${cleanKey()}`,
+      'HTTP-Referer': location.origin,
+      'X-Title': 'SpriteForge',
+    }
+  }
+
+  /** extrai a mensagem de erro do corpo JSON do OpenRouter, se houver */
+  function apiError(status: number, bodyText: string): string {
+    try {
+      const j = JSON.parse(bodyText) as { error?: { message?: string } }
+      if (j.error?.message) return `HTTP ${status}: ${j.error.message}`
+    } catch { /* corpo não é JSON */ }
+    return `HTTP ${status}: ${bodyText.slice(0, 300)}`
+  }
+
+  keyInput.value = localStorage.getItem(LS.key) ?? ''
+  modelInput.value = localStorage.getItem(LS.model) ?? DEFAULT_MODEL
+  promptInput.value = localStorage.getItem(LS.prompt) ?? ''
+  directivesInput.value = localStorage.getItem(LS.directives) ?? DEFAULT_DIRECTIVES
+  durationSelect.value = localStorage.getItem(LS.duration) ?? '4'
+  loopToggle.checked = (localStorage.getItem(LS.loop) ?? '1') === '1'
+  imgModeSelect.value = localStorage.getItem(LS.imgmode) ?? 'first'
+  imgModeSelect.onchange = () => localStorage.setItem(LS.imgmode, imgModeSelect.value)
+
+  $<HTMLButtonElement>('#gv-dir-reset').onclick = () => {
+    directivesInput.value = DEFAULT_DIRECTIVES
+    localStorage.setItem(LS.directives, DEFAULT_DIRECTIVES)
+    toast('DIRETRIZES RESTAURADAS')
+  }
+
+  keyInput.oninput = () => localStorage.setItem(LS.key, keyInput.value.trim())
+
+  $<HTMLButtonElement>('#gv-test').onclick = async () => {
+    const key = cleanKey()
+    if (!key) {
+      toast('COLE A API KEY PRIMEIRO', true)
+      return
+    }
+    setStatus(`TESTANDO CHAVE (sk-...${key.slice(-4)})...`)
+    try {
+      const res = await fetch(KEY_INFO_URL, { headers: authHeaders() })
+      const text = await res.text()
+      if (!res.ok) {
+        setStatus(`CHAVE RECUSADA — ${apiError(res.status, text)}`, true)
+        return
+      }
+      const info = JSON.parse(text) as { data?: { label?: string; usage?: number; limit?: number | null } }
+      const d = info.data
+      setStatus(
+        `CHAVE OK ✓ ${d?.label ?? ''} · uso $${(d?.usage ?? 0).toFixed(2)}` +
+        (d?.limit != null ? ` / limite $${d.limit.toFixed(2)}` : ''),
+      )
+      toast('CHAVE VÁLIDA ✓')
+    } catch (err) {
+      setStatus(`FALHA NO TESTE: ${err instanceof Error ? err.message : String(err)}`, true)
+    }
+  }
+  modelInput.oninput = () => localStorage.setItem(LS.model, modelInput.value.trim())
+  promptInput.oninput = () => localStorage.setItem(LS.prompt, promptInput.value)
+  directivesInput.oninput = () => localStorage.setItem(LS.directives, directivesInput.value)
+  durationSelect.onchange = () => {
+    localStorage.setItem(LS.duration, durationSelect.value)
+    updateEstimate()
+  }
+  loopToggle.onchange = () => localStorage.setItem(LS.loop, loopToggle.checked ? '1' : '0')
+
+  function updateEstimate(): void {
+    const s = Number(durationSelect.value)
+    $('#gv-estimate').textContent = `≈ $${(s * COST_PER_SECOND).toFixed(2)} por geração`
+  }
+  updateEstimate()
+
+  // ── referências do projeto ──────────────────────────────
+  const refsBox = $('#gv-refs')
+  const fileInput = $<HTMLInputElement>('#gv-files')
+  $('#gv-add').onclick = () => fileInput.click()
+  fileInput.onchange = () => {
+    if (fileInput.files?.length) void addRefs(Array.from(fileInput.files))
+    fileInput.value = ''
+  }
+  refsBox.ondragover = (e) => e.preventDefault()
+  refsBox.ondrop = (e) => {
+    e.preventDefault()
+    if (e.dataTransfer?.files?.length) void addRefs(Array.from(e.dataTransfer.files))
+  }
+
+  async function addRefs(files: File[]): Promise<void> {
+    let added = 0
+    for (const f of files) {
+      if (!f.type.startsWith('image/')) continue
+      const ref = { id: uid(), name: f.name, blob: f as Blob }
+      project.refs.push(ref)
+      if (selected.size < MAX_REFS) selected.add(ref.id)
+      added++
+    }
+    if (!added) return
+    await saveProject()
+    renderRefs()
+    toast(`${added} REFERÊNCIA${added > 1 ? 'S' : ''} SALVA${added > 1 ? 'S' : ''} NO PROJETO`)
+  }
+
+  function renderRefs(): void {
+    refsBox.innerHTML = ''
+    if (!project.refs.length) {
+      const hint = document.createElement('span')
+      hint.className = 'dim refs-empty'
+      hint.textContent = 'o projeto ainda não tem referências — adicione com o botão acima'
+      refsBox.append(hint)
+    }
+    for (const ref of project.refs) {
+      const cell = document.createElement('button')
+      cell.className = 'gv-ref' + (selected.has(ref.id) ? ' sel' : '')
+      cell.title = ref.name
+      const img = document.createElement('img')
+      img.src = refUrl(ref.id, ref.blob)
+      cell.append(img)
+      cell.onclick = () => {
+        if (selected.has(ref.id)) {
+          selected.delete(ref.id)
+        } else if (selected.size >= MAX_REFS) {
+          toast(`MÁXIMO DE ${MAX_REFS} REFERÊNCIAS POR GERAÇÃO`, true)
+          return
+        } else {
+          selected.add(ref.id)
+        }
+        renderRefs()
+      }
+      refsBox.append(cell)
+    }
+    $('#gv-refs-count').textContent = `${selected.size}/${MAX_REFS}`
+  }
+
+  // ── prompt final ────────────────────────────────────────
+  function fullPrompt(): string {
+    const lines = directivesInput.value
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+    if (loopToggle.checked) lines.push(LOOP_LINE)
+    return `${promptInput.value.trim()}\n\nDiretrizes obrigatórias:\n${lines.map((l) => `- ${l}`).join('\n')}`
+  }
+
+  /**
+   * Prepara a referência para o envio: reduz para no máx. 1024px e
+   * re-codifica em JPEG sobre fundo chroma — payloads de base64 grandes
+   * derrubam a geração no provedor com "internal error".
+   */
+  async function prepRef(blob: Blob): Promise<string> {
+    const bmp = await createImageBitmap(blob)
+    const s = Math.min(1, 1024 / Math.max(bmp.width, bmp.height))
+    const w = Math.max(1, Math.round(bmp.width * s))
+    const h = Math.max(1, Math.round(bmp.height * s))
+    const cv = document.createElement('canvas')
+    cv.width = w
+    cv.height = h
+    const ctx = cv.getContext('2d')!
+    ctx.fillStyle = '#00b140'
+    ctx.fillRect(0, 0, w, h)
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(bmp, 0, 0, w, h)
+    bmp.close()
+    return cv.toDataURL('image/jpeg', 0.9)
+  }
+
+  // ── geração ─────────────────────────────────────────────
+  const genBtn = $<HTMLButtonElement>('#btn-generate')
+  const statusEl = $('#gv-status')
+  const video = $<HTMLVideoElement>('#gv-video')
+  const downloadBtn = $<HTMLButtonElement>('#btn-gv-download')
+  const useBtn = $<HTMLButtonElement>('#btn-gv-use')
+
+  function setStatus(msg: string, error = false): void {
+    statusEl.textContent = msg ? `· ${msg}` : ''
+    statusEl.classList.toggle('warn', error)
+  }
+
+  function setLoading(on: boolean): void {
+    $('#gv-loading').classList.toggle('hidden', !on)
+  }
+
+  function setResult(blob: Blob | null): void {
+    resultBlob = blob
+    if (resultUrl) {
+      URL.revokeObjectURL(resultUrl)
+      resultUrl = null
+    }
+    if (blob) {
+      resultUrl = URL.createObjectURL(blob)
+      video.src = resultUrl
+      video.classList.remove('hidden')
+      void video.play().catch(() => undefined)
+    } else {
+      video.removeAttribute('src')
+      video.classList.add('hidden')
+    }
+    downloadBtn.disabled = !blob
+    useBtn.disabled = !blob
+  }
+
+  genBtn.onclick = () => {
+    if (running) {
+      cancelled = true
+      setStatus('CANCELADO (o job continua no OpenRouter, mas foi descartado aqui)')
+      finishRun()
+      return
+    }
+    void generate()
+  }
+
+  function finishRun(): void {
+    running = false
+    clearInterval(elapsedTimer)
+    setLoading(false)
+    genBtn.textContent = 'GERAR VÍDEO_'
+    genBtn.classList.remove('armed')
+  }
+
+  async function generate(): Promise<void> {
+    const key = cleanKey()
+    if (!key) {
+      toast('INFORME A API KEY DO OPENROUTER', true)
+      keyInput.focus()
+      return
+    }
+    if (!promptInput.value.trim()) {
+      toast('DESCREVA A ANIMAÇÃO NO PROMPT', true)
+      promptInput.focus()
+      return
+    }
+    const chosen = project.refs.filter((r) => selected.has(r.id))
+    running = true
+    cancelled = false
+    setResult(null)
+    setLoading(true)
+    $('#gv-loading-time').textContent = '0s'
+    genBtn.textContent = 'CANCELAR'
+    genBtn.classList.add('armed')
+    $('#gv-cost').textContent = ''
+
+    const startedAt = Date.now()
+    const elapsed = (): string => `${Math.round((Date.now() - startedAt) / 1000)}s`
+
+    try {
+      setStatus('PREPARANDO REFERÊNCIAS...')
+      const dataUrls = await Promise.all(chosen.map((r) => prepRef(r.blob)))
+
+      setStatus('ENVIANDO REQUISIÇÃO...')
+      // obs: grok-imagine-video NÃO aceita generate_audio (contrato do
+      // /videos/models lista generate_audio: null) — enviar derruba o job
+      const body: Record<string, unknown> = {
+        model: modelInput.value.trim() || DEFAULT_MODEL,
+        prompt: fullPrompt(),
+        duration: Number(durationSelect.value),
+        resolution: '480p',
+        aspect_ratio: '1:1',
+      }
+      // a xAI não aceita frame_images e input_references na mesma requisição —
+      // os modos são exclusivos
+      const asImageUrl = (url: string): object => ({ type: 'image_url', image_url: { url } })
+      if (dataUrls.length) {
+        if (imgModeSelect.value === 'first') {
+          // image-to-video: só a 1ª referência selecionada, como frame inicial
+          body.frame_images = [{ ...asImageUrl(dataUrls[0]), frame_type: 'first_frame' }]
+          if (dataUrls.length > 1) toast('MODO FRAME INICIAL: USANDO SÓ A 1ª REFERÊNCIA')
+        } else {
+          body.input_references = dataUrls.map(asImageUrl)
+        }
+      }
+
+      const res = await fetch(API_BASE, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const msg = apiError(res.status, await res.text())
+        if (res.status === 401) {
+          throw new Error(`${msg} — chave recusada; use TESTAR e confira em openrouter.ai/settings/keys`)
+        }
+        if (res.status === 402) {
+          throw new Error(`${msg} — créditos insuficientes no OpenRouter`)
+        }
+        throw new Error(msg)
+      }
+      const job = (await res.json()) as { id: string; polling_url?: string }
+      const pollUrl = job.polling_url ?? `${API_BASE}/${job.id}`
+
+      elapsedTimer = window.setInterval(() => {
+        if (running && !cancelled) {
+          setStatus(`GERANDO... ${elapsed()}`)
+          $('#gv-loading-time').textContent = elapsed()
+        }
+      }, 1000)
+
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 10000))
+        if (cancelled || !alive) return
+        let poll: { status: string; unsigned_urls?: string[]; error?: unknown; usage?: { cost?: number } }
+        try {
+          const pr = await fetch(pollUrl, { headers: authHeaders() })
+          if (!pr.ok) continue // erro transitório de polling: tenta de novo
+          poll = await pr.json()
+        } catch {
+          continue
+        }
+        if (cancelled || !alive) return
+
+        if (poll.status === 'completed') {
+          setStatus(`BAIXANDO VÍDEO... ${elapsed()}`)
+          const contentUrl = poll.unsigned_urls?.[0] ?? `${API_BASE}/${job.id}/content?index=0`
+          const vres = await fetch(contentUrl, { headers: authHeaders() })
+          if (!vres.ok) throw new Error(`falha ao baixar o vídeo (HTTP ${vres.status})`)
+          const blob = await vres.blob()
+          if (cancelled || !alive) return
+          setResult(blob.type.startsWith('video/') ? blob : new Blob([blob], { type: 'video/mp4' }))
+          setStatus(`PRONTO ✓ ${elapsed()}`)
+          if (poll.usage?.cost != null) {
+            $('#gv-cost').textContent = `custo: $${poll.usage.cost.toFixed(3)}`
+          }
+          toast('VÍDEO GERADO ✓')
+          return
+        }
+        if (poll.status === 'failed') {
+          const detail = typeof poll.error === 'string' ? poll.error : JSON.stringify(poll.error ?? 'sem detalhes')
+          throw new Error(`geração falhou: ${detail.slice(0, 300)} (job ${job.id})`)
+        }
+      }
+    } catch (err) {
+      console.error(err)
+      setStatus(`ERRO: ${err instanceof Error ? err.message : String(err)}`, true)
+      toast('FALHA NA GERAÇÃO', true)
+    } finally {
+      finishRun()
+    }
+  }
+
+  // ── resultado ───────────────────────────────────────────
+  downloadBtn.onclick = () => {
+    if (!resultBlob) return
+    downloadBlob(resultBlob, `${slugify(promptInput.value) || 'animacao'}.mp4`)
+  }
+
+  useBtn.onclick = () => {
+    if (!resultBlob) return
+    const file = new File([resultBlob], `${slugify(promptInput.value) || 'animacao'}.mp4`, {
+      type: 'video/mp4',
+    })
+    opts.onUse(file)
+  }
+
+  setResult(null)
+  renderRefs()
+  setStatus(project.refs.length ? '' : 'adicione referências do personagem')
+
+  return () => {
+    alive = false
+    cancelled = true
+    clearInterval(elapsedTimer)
+    if (resultUrl) URL.revokeObjectURL(resultUrl)
+    urlMap.forEach((u) => URL.revokeObjectURL(u))
+  }
+}
+
+function slugify(name: string): string {
+  return name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40)
+}
