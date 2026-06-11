@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { componentBoxes, expandBoxes, fitRect, mergeBoxes, sortReadingOrder, type Box } from '../src/slicer'
+import { componentBoxes, expandBoxes, fitRect, mergeBoxes, sortReadingOrder, splitOversized, tightenBox, type Box } from '../src/slicer'
 
 /** máscara w×h a partir de linhas de '.' e '#' */
 function mask(rows: string[]): { alpha: Uint8Array; w: number; h: number } {
@@ -95,6 +95,61 @@ describe('expandBoxes', () => {
   it('respeita os limites da folha', () => {
     const out = expandBoxes([{ x: 2, y: 2, w: 10, h: 10 }], 20, 20, 50)
     expect(out[0]).toEqual({ x: 0, y: 0, w: 20, h: 20 })
+  })
+})
+
+describe('splitOversized', () => {
+  /** máscara com dois blocos densos ligados por uma ponte fina */
+  function bridged(): { mask: Uint8Array; w: number; h: number } {
+    const w = 120
+    const h = 40
+    const mask = new Uint8Array(w * h)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const leftBlob = x >= 2 && x < 50
+        const rightBlob = x >= 70 && x < 118
+        const bridge = y === 20 && x >= 50 && x < 70 // 1px de aura conectando
+        if (leftBlob || rightBlob || bridge) mask[y * w + x] = 1
+      }
+    }
+    return { mask, w, h }
+  }
+
+  it('corta um componente gigante no vale do perfil', () => {
+    const { mask, w } = bridged()
+    // caixa única gigante + duas caixas normais para ancorar a mediana
+    const giant: Box = { x: 2, y: 0, w: 116, h: 40 }
+    const anchors: Box[] = [
+      { x: 0, y: 0, w: 48, h: 40 },
+      { x: 0, y: 0, w: 48, h: 40 },
+    ]
+    const out = splitOversized([giant, ...anchors], mask, w)
+    expect(out.length).toBe(4) // gigante virou 2 + as 2 âncoras
+    const widths = out.map((b) => b.w).sort((a, b) => a - b)
+    expect(widths.every((wd) => wd <= 60)).toBe(true)
+  })
+
+  it('não corta caixas dentro do tamanho típico', () => {
+    const { mask, w } = bridged()
+    const boxes: Box[] = [
+      { x: 2, y: 0, w: 48, h: 40 },
+      { x: 70, y: 0, w: 48, h: 40 },
+      { x: 2, y: 0, w: 48, h: 40 },
+    ]
+    expect(splitOversized(boxes, mask, w)).toHaveLength(3)
+  })
+})
+
+describe('tightenBox', () => {
+  it('encolhe a caixa para o conteúdo real e devolve null quando vazia', () => {
+    const { alpha, w } = mask([
+      '......',
+      '..##..',
+      '..##..',
+      '......',
+    ])
+    expect(tightenBox(alpha, w, { x: 0, y: 0, w: 6, h: 4 })).toEqual({ x: 2, y: 1, w: 2, h: 2 })
+    expect(tightenBox(alpha, w, { x: 0, y: 0, w: 2, h: 1 })).toBeNull()
   })
 })
 

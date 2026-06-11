@@ -108,6 +108,111 @@ export function sortReadingOrder(boxes: Box[]): Box[] {
   return rows.flatMap((r) => r.sort((a, b) => a.x - b.x))
 }
 
+/** bbox do conteúdo da máscara dentro de uma região (null se vazia) */
+export function tightenBox(mask: Uint8Array, w: number, b: Box): Box | null {
+  let minX = Infinity, minY = Infinity, maxX = -1, maxY = -1
+  for (let y = b.y; y < b.y + b.h; y++) {
+    for (let x = b.x; x < b.x + b.w; x++) {
+      if (mask[y * w + x]) {
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+      }
+    }
+  }
+  if (maxX < 0) return null
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 }
+}
+
+/** centro do melhor vale do perfil, ou -1 se não for raso o bastante */
+function bestValley(profile: number[], margin: number, maxRatio: number): number {
+  let peak = 0
+  for (const v of profile) if (v > peak) peak = v
+  if (!peak) return -1
+  let best = -1
+  let bestV = Infinity
+  for (let i = margin; i < profile.length - margin; i++) {
+    if (profile[i] < bestV) {
+      bestV = profile[i]
+      best = i
+    }
+  }
+  if (best < 0 || bestV > peak * maxRatio) return -1
+  // corta no CENTRO do platô do vale — divisão simétrica do resíduo de aura
+  const limit = bestV + Math.max(1, peak * 0.02)
+  let lo = best
+  let hi = best
+  while (lo > margin && profile[lo - 1] <= limit) lo--
+  while (hi < profile.length - margin - 1 && profile[hi + 1] <= limit) hi++
+  return Math.floor((lo + hi) / 2)
+}
+
+/**
+ * Divide caixas grandes demais (itens com brilho encostado que viraram um
+ * componente só) cortando no vale do perfil de alpha — a linha entre dois
+ * itens tem muito menos pixels que os núcleos, mesmo com aura. Recursivo
+ * até as caixas ficarem próximas da mediana.
+ */
+export function splitOversized(boxes: Box[], mask: Uint8Array, w: number, factor = 1.6): Box[] {
+  if (!boxes.length) return boxes
+  const med = (vals: number[]): number => [...vals].sort((a, b) => a - b)[Math.floor(vals.length / 2)]
+  const medW = med(boxes.map((b) => b.w))
+  const medH = med(boxes.map((b) => b.h))
+  // com poucas caixas a mediana não é confiável: corta só em vales bem fundos
+  const aggressive = boxes.length < 3
+  const ratio = aggressive ? 0.2 : 0.35
+
+  const out: Box[] = []
+  const queue = boxes.map((b) => ({ ...b }))
+  let guard = 0
+  while (queue.length && guard++ < 4096) {
+    const b = queue.pop()!
+    const wantV = aggressive ? b.w > 48 : b.w > medW * factor
+    const wantH = aggressive ? b.h > 48 : b.h > medH * factor
+    let split = false
+
+    if (wantV) {
+      const profile: number[] = []
+      for (let x = b.x; x < b.x + b.w; x++) {
+        let s = 0
+        for (let y = b.y; y < b.y + b.h; y++) s += mask[y * w + x]
+        profile.push(s)
+      }
+      const margin = Math.max(8, Math.floor((aggressive ? 24 : medW * 0.4)))
+      const cut = bestValley(profile, margin, ratio)
+      if (cut >= 0) {
+        const a = tightenBox(mask, w, { x: b.x, y: b.y, w: cut, h: b.h })
+        const c = tightenBox(mask, w, { x: b.x + cut, y: b.y, w: b.w - cut, h: b.h })
+        if (a) queue.push(a)
+        if (c) queue.push(c)
+        split = true
+      }
+    }
+
+    if (!split && wantH) {
+      const profile: number[] = []
+      for (let y = b.y; y < b.y + b.h; y++) {
+        let s = 0
+        for (let x = b.x; x < b.x + b.w; x++) s += mask[y * w + x]
+        profile.push(s)
+      }
+      const margin = Math.max(8, Math.floor((aggressive ? 24 : medH * 0.4)))
+      const cut = bestValley(profile, margin, ratio)
+      if (cut >= 0) {
+        const a = tightenBox(mask, w, { x: b.x, y: b.y, w: b.w, h: cut })
+        const c = tightenBox(mask, w, { x: b.x, y: b.y + cut, w: b.w, h: b.h - cut })
+        if (a) queue.push(a)
+        if (c) queue.push(c)
+        split = true
+      }
+    }
+
+    if (!split) out.push(b)
+  }
+  return out
+}
+
 /**
  * Expande cada caixa por `pad` px em todos os lados, travando na metade do
  * vão até o vizinho mais próximo (sem nunca invadir nem encolher) e nos
@@ -293,7 +398,8 @@ export function initSlicer(): () => void {
     const dist = Math.max(0, Math.floor(Number(mergeInput.value) || 12))
     const pad = Math.max(0, Math.floor(Number(padInput.value) || 0))
     const detected = mergeBoxes(componentBoxes(mask, w, h, minArea), dist)
-    boxes = sortReadingOrder(expandBoxes(detected, w, h, pad))
+    const separated = splitOversized(detected, mask, w)
+    boxes = sortReadingOrder(expandBoxes(separated, w, h, pad))
     selected = -1
     status('')
     updateInfo()
