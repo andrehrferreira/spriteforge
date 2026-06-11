@@ -14,11 +14,11 @@
 
 ## 3. Motor de análise
 
-- [ ] 3.1 `src/analyze.ts` (novo): infraestrutura — amostragem reduzida (lado máx. 384px) pós-chroma com cópia imediata do canvas reutilizado de `loop.render`; métricas (% de pixels com diferença acima de limiar, RGBA premultiplicado); saída determinística (ordem estável)
-- [ ] 3.2 `src/analyze.ts`: detectores de proporção entre animações e de ajuste fino de posição (desvio de pivô), com fator/offset sugerido
-- [ ] 3.3 `src/analyze.ts`: detectores de frames duplicados/desnecessários e de descontinuidade entre frames, com índices candidatos e economia estimada em bytes
-- [ ] 3.4 `src/analyze.ts`: detectores de redução de arquivo — recorte de célula (célula > bbox real), quantização (contagem de cores vs paleta) e escala, cada um com impacto estimado
-- [ ] 3.5 `src/analyze.ts`: detectores de pixel — artefatos residuais de chroma e pixels órfãos isolados, descrevendo o ajuste proposto
+- [x] 3.1 `src/analyze.ts` (novo): infraestrutura — amostragem reduzida pós-chroma com cópia imediata do canvas reutilizado de `loop.render` (`sampleFromCanvas`); métricas (`diffPct`, `centroidOf`, `orphanCount`, `uniqueColorCount`, `estimateAtlasBytes`); `detectAll` com saída determinística (ordem estável)
+- [x] 3.2 `src/analyze.ts`: detectores de proporção entre animações (`detectProportion`) e de ajuste fino de posição (`detectPosition`), com fator/offset sugerido
+- [x] 3.3 `src/analyze.ts`: detectores de frames duplicados (`detectDuplicates`, com economia estimada e fusão de duração) e de descontinuidade na emenda (`detectContinuity`)
+- [x] 3.4 `src/analyze.ts`: detectores de redução de arquivo — `detectTrim` (margem), `detectQuantization` (cores em uso vs paleta) e `detectScale`, com impacto estimado
+- [x] 3.5 `src/analyze.ts`: detector de pixel — `detectPixels` (pixels órfãos/resíduo de chroma), com limpeza aplicável na geração
 
 ## 4. Propostas e geração com correções
 
