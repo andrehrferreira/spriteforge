@@ -34,6 +34,6 @@
 
 ## 6. Tail (mandatory — enforced by rulebook v5.3.0)
 
-- [ ] 6.1 Update or create documentation covering the implementation (README: fluxo projeto → alinhamento → SPRITES, formato do ZIP/manifesto v4, correções)
-- [ ] 6.2 Write tests covering the new behavior (instalar vitest; unit tests das partes puras: métricas/limiares e determinismo de `analyze`, layout pós-correções, desambiguação de slugs, montagem do manifesto, hash de stale, migração de schema)
-- [ ] 6.3 Run tests and confirm they pass (`tsc --noEmit` + `vitest run` verdes; build vite ok)
+- [x] 6.1 Update or create documentation covering the implementation (README: fluxo projeto → alinhamento → SPRITES, formato do ZIP/manifesto v4, correções, `npm test`)
+- [x] 6.2 Write tests covering the new behavior (vitest instalado; 24 testes: métricas e 8 detectores de `analyze` + determinismo, layout/escala/padding, slugs e desambiguação, manifesto v4 com coordenadas e durações, `animStateHash` para stale)
+- [x] 6.3 Run tests and confirm they pass (`tsc --noEmit` limpo, `vitest run` 24/24, `vite build` ok)

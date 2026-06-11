@@ -15,6 +15,7 @@ Roda 100% no navegador — os vídeos e configurações ficam salvos localmente
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # gera dist/ estático
+npm test         # vitest (análise, manifesto, hash de versões)
 ```
 
 ## Fluxo
@@ -36,14 +37,29 @@ npm run build    # gera dist/ estático
    - *Crossfade*: funde o fim do loop com o início para eliminar o salto da
      emenda (frames consumidos ficam marcados em âmbar).
    - *Preview*: play/pause (espaço), passo a passo (←/→), FPS, zoom, fundos.
-4. **Alinhar & exportar** —
+4. **Alinhar** —
    - Analisa o conteúdo opaco de cada animação (bounding box após o chroma).
    - Define a **célula comum** (tamanho único para todas) e o **pivô
      compartilhado** (presets pé/centro/topo ou X/Y manual + margem).
-   - Ajuste fino por animação: deslocamento X/Y e escala, com **ghost** de
-     outra animação sobreposto para comparar.
-   - Exporta o atlas: escala global, padding, colunas e compactação PNG
-     (paleta 256/128/64 cores via UPNG.js, sem perda, ou nativo).
+   - Ajuste fino por animação: arraste no preview ou deslocamento X/Y e
+     escala numéricos, com **ghost** de outra animação para comparar.
+5. **SPRITES (análise, geração e versões)** — a etapa final, acessível pelo
+   dashboard ou pelo botão "AVANÇAR" do alinhamento:
+   - *Análise automática*: propõe correções **não-destrutivas** (nunca
+     alteram as animações originais — só a geração): proporção e posição
+     entre animações, frames duplicados (removidos do atlas com a duração
+     somada no anterior), emenda sem continuidade (crossfade na geração),
+     margem/escala/quantização para reduzir o arquivo (com economia
+     estimada) e limpeza de pixels órfãos do chroma.
+   - Cada proposta pode ser **aceita, rejeitada ou ajustada** antes de gerar;
+     o preview reflete as correções aceitas. O limite de 16384px é revalidado
+     após as correções, com proposta automática de escala quando estoura.
+   - *GERAR & SALVAR* produz 1 atlas PNG por animação e **persiste a versão
+     no projeto** (IndexedDB, store próprio) com metadados e as correções
+     aplicadas. Compactação PNG via paleta (UPNG.js).
+   - *Versões*: baixe em **ZIP único** (PNGs + manifesto), **regere** com os
+     parâmetros salvos ou exclua. Versões geradas antes de qualquer edição
+     nas animações ganham o selo **DESATUALIZADO**.
 
 ## Geração de vídeo (OpenRouter)
 
@@ -68,15 +84,20 @@ exportação de todas no mesmo tamanho com fundo chroma padrão `#00b140`.
 
 ## Formato da exportação
 
-Um PNG **por animação** (`projeto_anim.png`) + um manifesto JSON único:
+O ZIP de uma versão contém um PNG **por animação** (`projeto_anim.png`) + um
+manifesto JSON único (`meta.version = 4` é a versão do formato;
+`meta.generation` é a versão da geração no projeto):
 
 ```jsonc
 {
   "meta": {
+    "version": 4,
+    "generation": 3,
     "project": "heroi",
     "frameSize": { "w": 256, "h": 256 },  // célula única de todas as animações
     "pivot": { "x": 0.5, "y": 1 },        // pivô normalizado (base dos pés)
-    "compression": "paleta-256-cores"
+    "compression": "paleta-256-cores",
+    "corrections": [ /* correções aplicadas nesta geração */ ]
   },
   "animations": {
     "idle": {
