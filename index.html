@@ -472,9 +472,10 @@
               <button id="sl-redetect" class="btn btn-small">REDETECTAR</button>
             </div>
           </div>
+          <div class="frames-hint dim">limiar alto separa itens com brilho encostado; a FOLGA devolve o brilho a cada caixa, parando na metade do vão até o vizinho</div>
           <label class="slider-field">
-            <span class="sf-head">LIMIAR ALFA <span class="value" id="sl-threshold-val">24</span></span>
-            <input type="range" id="sl-threshold" min="1" max="255" value="24" />
+            <span class="sf-head">LIMIAR ALFA <span class="value" id="sl-threshold-val">48</span></span>
+            <input type="range" id="sl-threshold" min="1" max="255" value="48" />
           </label>
           <div class="cfg-row tight">
             <label class="field">
@@ -486,6 +487,10 @@
               <input type="number" id="sl-merge" class="text-input" min="0" max="128" value="12" />
             </label>
             <label class="field">
+              <span class="field-label">FOLGA (PX)</span>
+              <input type="number" id="sl-pad" class="text-input" min="0" max="256" value="24" title="expande cada caixa para incluir o brilho, sem invadir o vizinho" />
+            </label>
+            <label class="field">
               <span class="field-label">TOL. FUNDO</span>
               <input type="number" id="sl-tol" class="text-input" min="0" max="300" value="14" title="tolerância da remoção de fundo sólido" />
             </label>
@@ -494,6 +499,12 @@
 
         <section class="panel">
           <div class="panel-title">CAIXA <span id="sl-selinfo" class="dim"></span></div>
+          <div class="sl-item-row">
+            <div class="sl-item-preview" title="resultado final do item selecionado">
+              <canvas id="sl-item-canvas"></canvas>
+            </div>
+            <span id="sl-item-meta" class="dim" style="font-size: 11px"></span>
+          </div>
           <div class="cfg-row tight">
             <label class="field"><span class="field-label">X</span><input type="number" id="sl-x" class="text-input" /></label>
             <label class="field"><span class="field-label">Y</span><input type="number" id="sl-y" class="text-input" /></label>

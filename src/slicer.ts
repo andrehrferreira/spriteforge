@@ -108,6 +108,41 @@ export function sortReadingOrder(boxes: Box[]): Box[] {
   return rows.flatMap((r) => r.sort((a, b) => a.x - b.x))
 }
 
+/**
+ * Expande cada caixa por `pad` px em todos os lados, travando na metade do
+ * vão até o vizinho mais próximo (sem nunca invadir nem encolher) e nos
+ * limites da folha — inclui o brilho ao redor sem fundir itens vizinhos.
+ */
+export function expandBoxes(boxes: Box[], sheetW: number, sheetH: number, pad: number): Box[] {
+  return boxes.map((b) => {
+    let left = pad
+    let right = pad
+    let top = pad
+    let bottom = pad
+    for (const o of boxes) {
+      if (o === b) continue
+      const vOverlap = o.y < b.y + b.h && b.y < o.y + o.h
+      const hOverlap = o.x < b.x + b.w && b.x < o.x + o.w
+      if (vOverlap) {
+        if (o.x + o.w <= b.x) left = Math.min(left, Math.max(0, Math.floor((b.x - (o.x + o.w)) / 2)))
+        if (o.x >= b.x + b.w) right = Math.min(right, Math.max(0, Math.floor((o.x - (b.x + b.w)) / 2)))
+      }
+      if (hOverlap) {
+        if (o.y + o.h <= b.y) top = Math.min(top, Math.max(0, Math.floor((b.y - (o.y + o.h)) / 2)))
+        if (o.y >= b.y + b.h) bottom = Math.min(bottom, Math.max(0, Math.floor((o.y - (b.y + b.h)) / 2)))
+      }
+    }
+    const x = Math.max(0, b.x - left)
+    const y = Math.max(0, b.y - top)
+    return {
+      x,
+      y,
+      w: Math.min(sheetW, b.x + b.w + right) - x,
+      h: Math.min(sheetH, b.y + b.h + bottom) - y,
+    }
+  })
+}
+
 /** retângulo de destino centralizado num quadrado `out`, com margem interna */
 export function fitRect(box: Box, out: number, marginPct: number): { dx: number; dy: number; dw: number; dh: number } {
   const margin = (out * marginPct) / 100
@@ -137,6 +172,7 @@ export function initSlicer(): () => void {
   const thrInput = $<HTMLInputElement>('#sl-threshold')
   const minAreaInput = $<HTMLInputElement>('#sl-minarea')
   const mergeInput = $<HTMLInputElement>('#sl-merge')
+  const padInput = $<HTMLInputElement>('#sl-pad')
   const tolInput = $<HTMLInputElement>('#sl-tol')
   const sizeSelect = $<HTMLSelectElement>('#sl-size')
   const marginInput = $<HTMLInputElement>('#sl-margin')
@@ -255,7 +291,9 @@ export function initSlicer(): () => void {
     for (let i = 0; i < w * h; i++) mask[i] = d[i * 4 + 3] >= thr ? 1 : 0
     const minArea = Math.max(1, Math.floor(Number(minAreaInput.value) || 64))
     const dist = Math.max(0, Math.floor(Number(mergeInput.value) || 12))
-    boxes = sortReadingOrder(mergeBoxes(componentBoxes(mask, w, h, minArea), dist))
+    const pad = Math.max(0, Math.floor(Number(padInput.value) || 0))
+    const detected = mergeBoxes(componentBoxes(mask, w, h, minArea), dist)
+    boxes = sortReadingOrder(expandBoxes(detected, w, h, pad))
     selected = -1
     status('')
     updateInfo()
@@ -405,6 +443,29 @@ export function initSlicer(): () => void {
   const selW = $<HTMLInputElement>('#sl-w')
   const selH = $<HTMLInputElement>('#sl-h')
 
+  // preview 1:1 do item como sairá no export (encaixe + margem + centro)
+  const itemCv = $<HTMLCanvasElement>('#sl-item-canvas')
+  const itemCtx = itemCv.getContext('2d')!
+
+  function renderItemPreview(): void {
+    const out = Number(sizeSelect.value)
+    if (itemCv.width !== out || itemCv.height !== out) {
+      itemCv.width = out
+      itemCv.height = out
+    }
+    itemCtx.clearRect(0, 0, out, out)
+    const b = selected >= 0 ? boxes[selected] : null
+    $('#sl-item-meta').textContent = b
+      ? `saída ${out}×${out}px · caixa ${b.w}×${b.h}px`
+      : 'clique numa caixa para ver o resultado final'
+    if (!b || !src) return
+    const marginPct = Math.max(0, Math.min(40, Number(marginInput.value) || 0))
+    const f = fitRect(b, out, marginPct)
+    itemCtx.imageSmoothingEnabled = true
+    itemCtx.imageSmoothingQuality = 'high'
+    itemCtx.drawImage(src, b.x, b.y, b.w, b.h, f.dx, f.dy, f.dw, f.dh)
+  }
+
   function syncSelInputs(): void {
     const b = selected >= 0 ? boxes[selected] : null
     $('#sl-selinfo').textContent = b ? `item ${String(selected + 1).padStart(2, '0')}` : 'nenhuma caixa selecionada'
@@ -413,6 +474,7 @@ export function initSlicer(): () => void {
       input.disabled = !b
     }
     $<HTMLButtonElement>('#sl-delete').disabled = !b
+    renderItemPreview()
   }
 
   for (const [input, key] of [[selX, 'x'], [selY, 'y'], [selW, 'w'], [selH, 'h']] as const) {
@@ -422,7 +484,13 @@ export function initSlicer(): () => void {
       if (!Number.isFinite(v)) return
       boxes[selected][key] = key === 'w' || key === 'h' ? Math.max(4, v) : v
       render()
+      renderItemPreview()
     }
+  }
+
+  marginInput.oninput = () => {
+    updateInfo()
+    renderItemPreview()
   }
 
   $<HTMLButtonElement>('#sl-delete').onclick = () => {

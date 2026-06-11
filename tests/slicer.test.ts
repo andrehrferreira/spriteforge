@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { componentBoxes, fitRect, mergeBoxes, sortReadingOrder, type Box } from '../src/slicer'
+import { componentBoxes, expandBoxes, fitRect, mergeBoxes, sortReadingOrder, type Box } from '../src/slicer'
 
 /** máscara w×h a partir de linhas de '.' e '#' */
 function mask(rows: string[]): { alpha: Uint8Array; w: number; h: number } {
@@ -67,6 +67,34 @@ describe('sortReadingOrder', () => {
       { x: 50, y: 2, w: 10, h: 10 },  // linha 1, col 2 (levemente desalinhada)
     ])
     expect(out.map((b) => [b.x, b.y])).toEqual([[0, 0], [50, 2], [0, 50], [50, 52]])
+  })
+})
+
+describe('expandBoxes', () => {
+  it('expande pela folga e trava na metade do vão até o vizinho', () => {
+    const boxes: Box[] = [
+      { x: 10, y: 10, w: 20, h: 20 },
+      { x: 50, y: 10, w: 20, h: 20 }, // vão de 20px entre elas
+    ]
+    const out = expandBoxes(boxes, 200, 200, 50)
+    // lado interno: metade do vão (10); lados livres: folga inteira (clampada na folha)
+    expect(out[0]).toEqual({ x: 0, y: 0, w: 40, h: 80 })
+    expect(out[1]).toEqual({ x: 40, y: 0, w: 80, h: 80 })
+  })
+
+  it('caixas que se tocam não invadem nem encolhem', () => {
+    const boxes: Box[] = [
+      { x: 0, y: 0, w: 10, h: 10 },
+      { x: 10, y: 0, w: 10, h: 10 },
+    ]
+    const out = expandBoxes(boxes, 100, 100, 8)
+    expect(out[0].x + out[0].w).toBeLessThanOrEqual(out[1].x)
+    expect(out[0].w).toBeGreaterThanOrEqual(10)
+  })
+
+  it('respeita os limites da folha', () => {
+    const out = expandBoxes([{ x: 2, y: 2, w: 10, h: 10 }], 20, 20, 50)
+    expect(out[0]).toEqual({ x: 0, y: 0, w: 20, h: 20 })
   })
 })
 
