@@ -34,6 +34,7 @@ export function initAlign(): () => void {
   let playing = true
   let loopPos = 0
   let saveTimer = 0
+  let lastVs = 1 // escala de visualização do último render (para o arraste)
 
   function scheduleSave(): void {
     clearTimeout(saveTimer)
@@ -202,6 +203,7 @@ export function initAlign(): () => void {
     }
     const cell = cellDims()
     const vs = Math.min((cv.width * 0.92) / cell.W, (cv.height * 0.92) / cell.H)
+    lastVs = vs
     const ox = (cv.width - cell.W * vs) / 2
     const oy = (cv.height - cell.H * vs) / 2
 
@@ -229,6 +231,35 @@ export function initAlign(): () => void {
     ctx.moveTo(pxv - 14, pyv); ctx.lineTo(pxv + 14, pyv)
     ctx.moveTo(pxv, pyv - 14); ctx.lineTo(pxv, pyv + 14)
     ctx.stroke()
+  }
+
+  // arraste no preview: move a animação atual (ajusta align.dx/dy)
+  let dragRef: { x: number; y: number; dx0: number; dy0: number } | null = null
+  cv.onpointerdown = (e) => {
+    const cur = current()
+    if (!cur || !ready) return
+    dragRef = { x: e.clientX, y: e.clientY, dx0: cur.align.dx, dy0: cur.align.dy }
+    cv.setPointerCapture(e.pointerId)
+    cv.classList.add('dragging')
+  }
+  cv.onpointermove = (e) => {
+    if (!dragRef) return
+    const cur = current()
+    if (!cur) return
+    // converte o delta do mouse (px CSS) para px do frame de origem:
+    // o conteúdo segue o cursor, então dx diminui ao arrastar para a direita
+    const k = devicePixelRatio / (lastVs * cur.align.scale)
+    cur.align.dx = Math.round(dragRef.dx0 - (e.clientX - dragRef.x) * k)
+    cur.align.dy = Math.round(dragRef.dy0 - (e.clientY - dragRef.y) * k)
+    renderAlign()
+  }
+  cv.onpointerup = () => {
+    if (!dragRef) return
+    dragRef = null
+    cv.classList.remove('dragging')
+    buildRows() // sincroniza os campos X/Y
+    updateInfo()
+    scheduleSave()
   }
 
   // playback

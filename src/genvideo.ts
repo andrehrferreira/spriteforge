@@ -17,7 +17,6 @@ const API_BASE = 'https://openrouter.ai/api/v1/videos'
 const KEY_INFO_URL = 'https://openrouter.ai/api/v1/key'
 const DEFAULT_MODEL = 'x-ai/grok-imagine-video'
 const MAX_REFS = 7
-const COST_PER_SECOND = 0.05
 
 const LS = {
   key: 'sf-or-key',
@@ -27,6 +26,7 @@ const LS = {
   duration: 'sf-gv-duration',
   loop: 'sf-gv-loop',
   imgmode: 'sf-gv-imgmode',
+  size: 'sf-gv-size',
 }
 
 const DEFAULT_DIRECTIVES = `vídeo para geração de sprite sheet de jogo
@@ -43,6 +43,38 @@ câmera 100% estática e travada: sem zoom, sem pan, sem cortes, sem mudança de
 
 const LOOP_LINE =
   'a animação é em looping: o último frame precisa terminar exatamente igual ao primeiro frame'
+
+/** contrato de cada modelo (GET /api/v1/videos/models) */
+interface ModelCfg {
+  sizes: string[]
+  durations: number[]
+  /** aceita o parâmetro generate_audio (enviamos false) */
+  sendAudioOff: boolean
+  /** suporta last_frame — permite fechar o loop por construção */
+  lastFrame: boolean
+  /** preço por segundo, ou null quando a cobrança é por tokens */
+  pricePerSec: ((size: string) => number) | null
+}
+
+const MODELS: Record<string, ModelCfg> = {
+  'x-ai/grok-imagine-video': {
+    sizes: ['480x480', '720x720', '640x480', '960x720', '854x480', '1280x720', '720x480', '1080x720', '480x640', '720x960', '480x854', '720x1280', '480x720', '720x1080'],
+    durations: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    sendAudioOff: false, // grok não aceita generate_audio
+    lastFrame: false,
+    pricePerSec: (size) => {
+      const [w, h] = size.split('x').map(Number)
+      return Math.max(w, h) >= 720 ? 0.07 : 0.05
+    },
+  },
+  'bytedance/seedance-2.0': {
+    sizes: ['480x480', '480x640', '480x854', '640x480', '854x480', '1120x480', '720x720', '720x960', '720x1280', '720x1680', '960x720', '1280x720', '1680x720', '1080x1080', '1080x1440', '1080x1920', '1440x1080', '1920x1080', '2520x1080'],
+    durations: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    sendAudioOff: true,
+    lastFrame: true,
+    pricePerSec: null, // cobrança por tokens de vídeo
+  },
+}
 
 export function initGenVideo(opts: { onUse: (file: File) => void }): () => void {
   const project = state.project!
@@ -69,12 +101,13 @@ export function initGenVideo(opts: { onUse: (file: File) => void }): () => void 
 
   // ── campos persistidos ──────────────────────────────────
   const keyInput = $<HTMLInputElement>('#gv-key')
-  const modelInput = $<HTMLInputElement>('#gv-model')
+  const modelSelect = $<HTMLSelectElement>('#gv-model')
   const promptInput = $<HTMLTextAreaElement>('#gv-prompt')
   const directivesInput = $<HTMLTextAreaElement>('#gv-directives')
   const durationSelect = $<HTMLSelectElement>('#gv-duration')
   const loopToggle = $<HTMLInputElement>('#gv-loop')
   const imgModeSelect = $<HTMLSelectElement>('#gv-imgmode')
+  const sizeSelect = $<HTMLSelectElement>('#gv-size')
 
   /** chave saneada: remove espaços, quebras de linha e aspas de cópia/cola */
   function cleanKey(): string {
@@ -99,13 +132,39 @@ export function initGenVideo(opts: { onUse: (file: File) => void }): () => void 
   }
 
   keyInput.value = localStorage.getItem(LS.key) ?? ''
-  modelInput.value = localStorage.getItem(LS.model) ?? DEFAULT_MODEL
+  modelSelect.value = localStorage.getItem(LS.model) ?? DEFAULT_MODEL
+  if (!modelSelect.value) modelSelect.value = DEFAULT_MODEL // valor antigo fora da lista
+
+  function modelCfg(): ModelCfg {
+    return MODELS[modelSelect.value] ?? MODELS[DEFAULT_MODEL]
+  }
+
+  /** repovoa tamanho/duração com o contrato do modelo, preservando a escolha */
+  function syncModelOptions(): void {
+    const cfg = modelCfg()
+    const prevSize = sizeSelect.value || localStorage.getItem(LS.size) || '640x480'
+    sizeSelect.innerHTML = cfg.sizes
+      .map((s) => `<option value="${s}">${s.replace('x', '×')}</option>`)
+      .join('')
+    sizeSelect.value = cfg.sizes.includes(prevSize) ? prevSize : '640x480'
+
+    const prevDur = Number(durationSelect.value || localStorage.getItem(LS.duration) || 4)
+    durationSelect.innerHTML = cfg.durations
+      .map((d) => `<option value="${d}">${d} s</option>`)
+      .join('')
+    durationSelect.value = String(cfg.durations.includes(prevDur) ? prevDur : cfg.durations[0] >= 4 ? cfg.durations[0] : 4)
+    updateEstimate()
+  }
   promptInput.value = localStorage.getItem(LS.prompt) ?? ''
   directivesInput.value = localStorage.getItem(LS.directives) ?? DEFAULT_DIRECTIVES
   durationSelect.value = localStorage.getItem(LS.duration) ?? '4'
   loopToggle.checked = (localStorage.getItem(LS.loop) ?? '1') === '1'
   imgModeSelect.value = localStorage.getItem(LS.imgmode) ?? 'first'
   imgModeSelect.onchange = () => localStorage.setItem(LS.imgmode, imgModeSelect.value)
+  sizeSelect.onchange = () => {
+    localStorage.setItem(LS.size, sizeSelect.value)
+    updateEstimate()
+  }
 
   $<HTMLButtonElement>('#gv-dir-reset').onclick = () => {
     directivesInput.value = DEFAULT_DIRECTIVES
@@ -114,6 +173,10 @@ export function initGenVideo(opts: { onUse: (file: File) => void }): () => void 
   }
 
   keyInput.oninput = () => localStorage.setItem(LS.key, keyInput.value.trim())
+  modelSelect.onchange = () => {
+    localStorage.setItem(LS.model, modelSelect.value)
+    syncModelOptions()
+  }
 
   $<HTMLButtonElement>('#gv-test').onclick = async () => {
     const key = cleanKey()
@@ -140,7 +203,6 @@ export function initGenVideo(opts: { onUse: (file: File) => void }): () => void 
       setStatus(`FALHA NO TESTE: ${err instanceof Error ? err.message : String(err)}`, true)
     }
   }
-  modelInput.oninput = () => localStorage.setItem(LS.model, modelInput.value.trim())
   promptInput.oninput = () => localStorage.setItem(LS.prompt, promptInput.value)
   directivesInput.oninput = () => localStorage.setItem(LS.directives, directivesInput.value)
   durationSelect.onchange = () => {
@@ -151,9 +213,13 @@ export function initGenVideo(opts: { onUse: (file: File) => void }): () => void 
 
   function updateEstimate(): void {
     const s = Number(durationSelect.value)
-    $('#gv-estimate').textContent = `≈ $${(s * COST_PER_SECOND).toFixed(2)} por geração`
+    const cfg = modelCfg()
+    const c = cfg.pricePerSec ? cfg.pricePerSec(sizeSelect.value) : null
+    $('#gv-estimate').textContent =
+      (c != null ? `≈ $${(s * c).toFixed(2)} por geração` : 'custo por tokens de vídeo (ver OpenRouter)') +
+      ` · ${sizeSelect.value.replace('x', '×')} · sem áudio`
   }
-  updateEstimate()
+  syncModelOptions()
 
   // ── referências do projeto ──────────────────────────────
   const refsBox = $('#gv-refs')
@@ -330,22 +396,28 @@ export function initGenVideo(opts: { onUse: (file: File) => void }): () => void 
       const dataUrls = await Promise.all(chosen.map((r) => prepRef(r.blob)))
 
       setStatus('ENVIANDO REQUISIÇÃO...')
-      // obs: grok-imagine-video NÃO aceita generate_audio (contrato do
-      // /videos/models lista generate_audio: null) — enviar derruba o job
+      const cfg = modelCfg()
       const body: Record<string, unknown> = {
-        model: modelInput.value.trim() || DEFAULT_MODEL,
+        model: modelSelect.value || DEFAULT_MODEL,
         prompt: fullPrompt(),
         duration: Number(durationSelect.value),
-        resolution: '480p',
-        aspect_ratio: '1:1',
+        size: sizeSelect.value,
       }
+      // grok não aceita generate_audio (contrato lista null); seedance aceita
+      if (cfg.sendAudioOff) body.generate_audio = false
       // a xAI não aceita frame_images e input_references na mesma requisição —
       // os modos são exclusivos
       const asImageUrl = (url: string): object => ({ type: 'image_url', image_url: { url } })
       if (dataUrls.length) {
         if (imgModeSelect.value === 'first') {
           // image-to-video: só a 1ª referência selecionada, como frame inicial
-          body.frame_images = [{ ...asImageUrl(dataUrls[0]), frame_type: 'first_frame' }]
+          const frameImgs: object[] = [{ ...asImageUrl(dataUrls[0]), frame_type: 'first_frame' }]
+          // modelos com last_frame (seedance) + loop: termina na mesma
+          // imagem do início → loop perfeito por construção
+          if (cfg.lastFrame && loopToggle.checked) {
+            frameImgs.push({ ...asImageUrl(dataUrls[0]), frame_type: 'last_frame' })
+          }
+          body.frame_images = frameImgs
           if (dataUrls.length > 1) toast('MODO FRAME INICIAL: USANDO SÓ A 1ª REFERÊNCIA')
         } else {
           body.input_references = dataUrls.map(asImageUrl)

@@ -576,6 +576,9 @@ input[type="range"]::-moz-range-thumb {
 .align-preview-panel { grid-area: apreview; }
 .align-preview-panel .align-wrap { height: auto; flex: 1; min-height: 220px; }
 #align-canvas, #norm-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#align-canvas { cursor: grab; }
+#align-canvas.dragging { cursor: grabbing; }
+#norm-canvas { cursor: ns-resize; }
 
 .tool-row { align-items: center; }
 .tool-desc { flex: 1; font-size: 12px; }

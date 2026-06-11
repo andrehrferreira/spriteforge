@@ -355,7 +355,7 @@
 
         <section class="panel">
           <div class="panel-title">AJUSTE POR ANIMAÇÃO</div>
-          <div class="frames-hint dim">X/Y movem o conteúdo em px &middot; ESC redimensiona &middot; compare com o ghost</div>
+          <div class="frames-hint dim">arraste a animação no preview para posicionar &middot; X/Y em px &middot; ESC redimensiona &middot; compare com o ghost</div>
           <div id="align-rows" class="align-rows"></div>
         </section>
 
@@ -442,7 +442,10 @@
           </label>
           <label class="field" style="margin-top: 10px">
             <span class="field-label">MODELO</span>
-            <input type="text" id="gv-model" class="text-input" spellcheck="false" />
+            <select id="gv-model">
+              <option value="x-ai/grok-imagine-video">xAI · Grok Imagine Video</option>
+              <option value="bytedance/seedance-2.0">ByteDance · Seedance 2.0</option>
+            </select>
           </label>
         </section>
 
@@ -455,17 +458,11 @@
           <div class="cfg-row tight" style="margin-top: 10px">
             <label class="field">
               <span class="field-label">DURAÇÃO</span>
-              <select id="gv-duration">
-                <option value="2">2 s</option>
-                <option value="3">3 s</option>
-                <option value="4" selected>4 s</option>
-                <option value="5">5 s</option>
-                <option value="6">6 s</option>
-              </select>
+              <select id="gv-duration"></select>
             </label>
             <label class="field">
-              <span class="field-label">FORMATO</span>
-              <span class="text-input fixed-info">1:1 · 480p · sem áudio</span>
+              <span class="field-label">TAMANHO (PX)</span>
+              <select id="gv-size"></select>
             </label>
           </div>
           <label class="field" style="margin-top: 10px">
