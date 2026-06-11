@@ -5,13 +5,14 @@
  * permite baixar (ZIP), regerar e excluir versões.
  */
 
+import { detectAll, sampleFromCanvas, type AnimInput, type FrameSample } from './analyze'
 import { ChromaProcessor } from './chroma'
 import { deleteSheet, listSheets, putSheet, QuotaError, uid } from './db'
 import { computeLayout, encodeCanvas, formatBytes, MAX_SHEET_DIM, uniqueSlug } from './export'
 import { createLoop, type Loop } from './loop'
 import { animStateHash, ensureFrames, saveProject, selectedBitmaps, state } from './state'
 import { toast } from './toast'
-import type { AnimationData, SheetAnimMeta, SpriteSheet } from './types'
+import type { AnimationData, Correction, SheetAnimMeta, SpriteSheet } from './types'
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T =>
   document.querySelector(sel) as T
@@ -23,6 +24,20 @@ interface Item {
   loop: Loop
   selIdx: number[]
   bounds: Bounds | null
+  /** bitmaps selecionados (para recompor o loop com crossfade corrigido) */
+  sel: ImageBitmap[]
+  /** amostras reduzidas dos frames do loop, para a análise */
+  samples: FrameSample[]
+}
+
+/** overrides de geração derivados das correções aceitas de uma animação */
+interface AnimEff {
+  scaleMul: number
+  dx: number
+  dy: number
+  removed: Set<number>
+  crossfade: number | null
+  cleanAlpha: number | null
 }
 
 export function initSprites(): () => void {
@@ -35,10 +50,12 @@ export function initSprites(): () => void {
   let preparing = false
   let items: Item[] = []
   let sheets: SpriteSheet[] = []
+  let corrections: Correction[] = []
   let current = 0 // índice em items
   let playing = true
   let loopPos = 0
   let saveTimer = 0
+  let analyzeTimer = 0
 
   function scheduleSave(): void {
     clearTimeout(saveTimer)
@@ -50,8 +67,9 @@ export function initSprites(): () => void {
   }
 
   // ── célula e âncora (mesma formulação do alinhamento) ───
-  function cellDims(): { W: number; H: number; px: number; py: number } {
+  function cellDims(marginOverride: number | null = null): { W: number; H: number; px: number; py: number } {
     const cfg = project.alignCfg
+    const margin = marginOverride ?? cfg.margin
     let maxW = 0
     let maxH = 0
     for (const it of items) {
@@ -60,12 +78,12 @@ export function initSprites(): () => void {
       maxH = Math.max(maxH, it.bounds.h * it.a.align.scale)
     }
     if (!maxW) { maxW = 32; maxH = 32 }
-    const W = Math.ceil(maxW) + cfg.margin * 2
-    const H = Math.ceil(maxH) + cfg.margin * 2
+    const W = Math.ceil(maxW) + margin * 2
+    const H = Math.ceil(maxH) + margin * 2
     return {
       W, H,
-      px: cfg.margin + (W - cfg.margin * 2) * cfg.pivotX,
-      py: cfg.margin + (H - cfg.margin * 2) * cfg.pivotY,
+      px: margin + (W - margin * 2) * cfg.pivotX,
+      py: margin + (H - margin * 2) * cfg.pivotY,
     }
   }
 
@@ -136,7 +154,15 @@ export function initSprites(): () => void {
         const loop = createLoop(proc, sel, a.chroma, a.crossfade, contiguous ? a.drift ?? null : null)
         status(`ANALISANDO ${a.name} (${i + 1}/${anims.length})`)
         const bounds = await computeBounds(a, sel)
-        items.push({ a, loop, selIdx, bounds })
+        if (!alive) return
+        // amostras para a análise — cópia imediata (o canvas do loop é reutilizado)
+        const samples: FrameSample[] = []
+        for (let p = 0; p < loop.length; p++) {
+          samples.push(sampleFromCanvas(loop.render(p)))
+          if (p % 8 === 7) await new Promise((r) => setTimeout(r, 0))
+          if (!alive) return
+        }
+        items.push({ a, loop, selIdx, bounds, sel, samples })
       } catch (err) {
         console.error(err)
         toast(`FALHA AO CARREGAR ${a.name}`, true)
@@ -151,8 +177,196 @@ export function initSprites(): () => void {
     if (!alive) return
     preparing = false
     status('')
+    runAnalysis()
     updateInfo()
     renderPreview()
+  }
+
+  // ── análise e propostas de correção ─────────────────────
+  function runAnalysis(): void {
+    if (!ready) return
+    const prev = new Map(corrections.map((c) => [c.id, c]))
+    const inputs: AnimInput[] = items.map((it) => ({
+      id: it.a.id,
+      name: it.a.name,
+      scale: it.a.align.scale,
+      dx: it.a.align.dx,
+      crossfade: it.loop.k,
+      srcW: it.sel[0]?.width ?? 1,
+      bounds: it.bounds,
+      samples: it.samples,
+    }))
+    corrections = detectAll(inputs, cellDims(), project.alignCfg, exp, project.spritesCfg)
+    // preserva decisões anteriores (aceito/ajustado) ao reanalisar
+    for (const c of corrections) {
+      const old = prev.get(c.id)
+      if (old) {
+        c.accepted = old.accepted
+        if (old.adjusted) {
+          c.params = { ...old.params }
+          c.adjusted = true
+        }
+      }
+    }
+    renderCorrections()
+  }
+
+  function scheduleAnalyze(): void {
+    clearTimeout(analyzeTimer)
+    analyzeTimer = window.setTimeout(runAnalysis, 300)
+  }
+
+  function renderCorrections(): void {
+    const box = $('#sp-corrections')
+    box.innerHTML = ''
+    const accepted = corrections.filter((c) => c.accepted).length
+    $('#sp-an-count').textContent = corrections.length ? `· ${accepted}/${corrections.length} aceitas` : ''
+    if (!corrections.length) {
+      const hint = document.createElement('span')
+      hint.className = 'dim refs-empty'
+      hint.textContent = ready
+        ? 'nenhuma correção sugerida — as animações estão consistentes; pode gerar direto'
+        : 'a análise roda quando as animações terminarem de carregar'
+      box.append(hint)
+      return
+    }
+    for (const c of corrections) {
+      const row = document.createElement('div')
+      row.className = 'corr-row' + (c.accepted ? ' on' : '')
+      const top = document.createElement('div')
+      top.className = 'corr-top'
+      const toggle = document.createElement('button')
+      toggle.className = 'chip corr-toggle' + (c.accepted ? ' active' : '')
+      toggle.textContent = c.accepted ? 'ACEITA ✓' : 'ACEITAR'
+      toggle.onclick = () => {
+        c.accepted = !c.accepted
+        renderCorrections()
+        updateInfo()
+        renderPreview()
+      }
+      const sev = document.createElement('span')
+      sev.className = `corr-sev sev-${c.severity}`
+      sev.textContent = c.severity.toUpperCase()
+      top.append(toggle, sev)
+      if (c.savingsBytes) {
+        const sv = document.createElement('span')
+        sv.className = 'dim corr-savings'
+        sv.textContent = `≈ -${formatBytes(c.savingsBytes)} (estimado)`
+        top.append(sv)
+      }
+      const key = Object.keys(c.params)[0]
+      if (key) {
+        const pr = document.createElement('label')
+        pr.className = 'ar-field corr-param'
+        const lab = document.createElement('span')
+        lab.className = 'ar-label'
+        lab.textContent = key.toUpperCase()
+        const input = document.createElement('input')
+        input.type = 'number'
+        input.className = 'text-input num-mini'
+        input.step = key === 'escala' ? '0.05' : '1'
+        input.value = String(c.params[key])
+        input.oninput = () => {
+          const v = Number(input.value)
+          if (!Number.isFinite(v)) return
+          c.params[key] = v
+          c.adjusted = true
+          updateInfo()
+          renderPreview()
+        }
+        pr.append(lab, input)
+        top.append(pr)
+      }
+      const label = document.createElement('div')
+      label.className = 'corr-label'
+      label.textContent = c.label
+      row.append(top, label)
+      box.append(row)
+    }
+  }
+
+  $('#sp-reanalyze').onclick = () => {
+    if (preparing) return
+    runAnalysis()
+    toast('ANÁLISE ATUALIZADA')
+  }
+
+  /** overrides de geração derivados das correções aceitas (por animação) */
+  function effFor(animId: string): AnimEff {
+    const e: AnimEff = { scaleMul: 1, dx: 0, dy: 0, removed: new Set(), crossfade: null, cleanAlpha: null }
+    for (const c of corrections) {
+      if (!c.accepted || c.target.animId !== animId) continue
+      switch (c.kind) {
+        case 'proporcao':
+          e.scaleMul = c.params.escala ?? 1
+          break
+        case 'posicao':
+          e.dx = c.params.dx ?? 0
+          e.dy = c.params.dy ?? 0
+          break
+        case 'duplicados':
+          for (const f of c.target.frames ?? []) e.removed.add(f)
+          break
+        case 'continuidade':
+          e.crossfade = Math.max(0, Math.round(c.params.crossfade ?? 3))
+          break
+        case 'pixel':
+          e.cleanAlpha = Math.round(c.params.alfa ?? 24)
+          break
+        case 'recorte':
+        case 'quantizacao':
+        case 'escala':
+          break // escopo de projeto, tratado em globalEff
+        default: {
+          const _exhaustive: never = c.kind
+          void _exhaustive
+        }
+      }
+    }
+    return e
+  }
+
+  /** overrides de escopo do projeto (margem/cores/escala) */
+  function globalEff(): { margin: number | null; colors: number | null; scale: number | null } {
+    const g: { margin: number | null; colors: number | null; scale: number | null } = { margin: null, colors: null, scale: null }
+    for (const c of corrections) {
+      if (!c.accepted || c.target.scope !== 'projeto') continue
+      if (c.kind === 'recorte') g.margin = Math.max(0, Math.round(c.params.margem ?? 8))
+      else if (c.kind === 'quantizacao') g.colors = Math.round(c.params.cores ?? 256)
+      else if (c.kind === 'escala') g.scale = Math.max(0.05, c.params.escala ?? exp.scale)
+    }
+    return g
+  }
+
+  /** remove pixels visíveis cujos 8 vizinhos são (quase) transparentes */
+  function cleanOrphans(target: CanvasRenderingContext2D, w: number, h: number, neighborAlpha: number): void {
+    const img = target.getImageData(0, 0, w, h)
+    const d = img.data
+    const kill: number[] = []
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const idx = y * w + x
+        if (d[idx * 4 + 3] <= 40) continue
+        let solid = false
+        for (let dy = -1; dy <= 1 && !solid; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dy) continue
+            if (d[((y + dy) * w + (x + dx)) * 4 + 3] > neighborAlpha) {
+              solid = true
+              break
+            }
+          }
+        }
+        if (!solid) kill.push(idx)
+      }
+    }
+    for (const idx of kill) {
+      d[idx * 4] = 0
+      d[idx * 4 + 1] = 0
+      d[idx * 4 + 2] = 0
+      d[idx * 4 + 3] = 0
+    }
+    if (kill.length) target.putImageData(img, 0, 0)
   }
 
   // ── preview ─────────────────────────────────────────────
@@ -177,7 +391,8 @@ export function initSprites(): () => void {
       ctx.fillText('PREPARANDO AS ANIMAÇÕES...', cv.width / 2, cv.height / 2)
       return
     }
-    const cell = cellDims()
+    const g = globalEff()
+    const cell = cellDims(g.margin)
     const vs = Math.min((cv.width * 0.92) / cell.W, (cv.height * 0.92) / cell.H)
     const ox = (cv.width - cell.W * vs) / 2
     const oy = (cv.height - cell.H * vs) / 2
@@ -187,13 +402,15 @@ export function initSprites(): () => void {
     ctx.rect(ox, oy, cell.W * vs, cell.H * vs)
     ctx.clip()
     if (it.bounds) {
+      // preview com as correções de escala/posição aceitas aplicadas
+      const eff = effFor(it.a.id)
       const frame = it.loop.render(loopPos % it.loop.length)
-      const s = it.a.align.scale
+      const s = it.a.align.scale * eff.scaleMul
       const { ax, ay } = anchorOf(it.a, it.bounds)
       ctx.drawImage(
         frame,
-        ox + (cell.px - ax * s) * vs,
-        oy + (cell.py - ay * s) * vs,
+        ox + (cell.px - (ax + eff.dx) * s) * vs,
+        oy + (cell.py - (ay + eff.dy) * s) * vs,
         frame.width * s * vs,
         frame.height * s * vs,
       )
@@ -227,11 +444,19 @@ export function initSprites(): () => void {
         const m = it.a.speed[it.selIdx[it.loop.k + (p % it.loop.length)]] ?? 1
         return 1 / (it.a.fps * m)
       }
+      const removed = effFor(it.a.id).removed
+      const next = (p: number): number => {
+        let q = (p + 1) % it.loop.length
+        // pula os frames removidos pelas correções aceitas (preview fiel)
+        let guard = 0
+        while (removed.has(q) && guard++ < it.loop.length) q = (q + 1) % it.loop.length
+        return q
+      }
       let spf = dur(loopPos)
       let advanced = false
       while (acc >= spf) {
         acc -= spf
-        loopPos = (loopPos + 1) % it.loop.length
+        loopPos = next(loopPos)
         advanced = true
         spf = dur(loopPos)
       }
@@ -285,10 +510,10 @@ export function initSprites(): () => void {
   expCols.value = String(exp.columns)
   expColors.value = String(exp.colors)
 
-  expScale.onchange = () => { exp.scale = Number(expScale.value); updateInfo(); scheduleSave() }
+  expScale.onchange = () => { exp.scale = Number(expScale.value); updateInfo(); scheduleAnalyze(); scheduleSave() }
   expPadding.oninput = () => { exp.padding = Math.max(0, Math.floor(Number(expPadding.value) || 0)); updateInfo(); scheduleSave() }
   expCols.oninput = () => { exp.columns = Math.max(0, Math.floor(Number(expCols.value) || 0)); updateInfo(); scheduleSave() }
-  expColors.onchange = () => { exp.colors = Number(expColors.value); scheduleSave() }
+  expColors.onchange = () => { exp.colors = Number(expColors.value); scheduleAnalyze(); scheduleSave() }
 
   function usableItems(): Item[] {
     return items.filter((it) => it.bounds)
@@ -296,7 +521,8 @@ export function initSprites(): () => void {
 
   function updateInfo(): void {
     if (!ready) return
-    const cell = cellDims()
+    const g = globalEff()
+    const cell = cellDims(g.margin)
     $('#sp-info').textContent = `célula ${cell.W}×${cell.H}px · pivô (${Math.round(cell.px)}, ${Math.round(cell.py)})`
     const usable = usableItems()
     const summary = $('#sp-summary')
@@ -305,19 +531,22 @@ export function initSprites(): () => void {
       summary.classList.add('warn')
       return
     }
+    const opts = { scale: g.scale ?? exp.scale, padding: exp.padding, columns: exp.columns }
     let maxW = 0
     let maxH = 0
     let total = 0
     for (const it of usable) {
-      const l = computeLayout(it.loop.length, cell.W, cell.H, exp)
+      const eff = effFor(it.a.id)
+      const kept = Math.max(1, it.loop.length - [...eff.removed].filter((p) => p < it.loop.length).length)
+      const l = computeLayout(kept, cell.W, cell.H, opts)
       maxW = Math.max(maxW, l.width)
       maxH = Math.max(maxH, l.height)
-      total += it.loop.length
+      total += kept
     }
     const tooBig = maxW > MAX_SHEET_DIM || maxH > MAX_SHEET_DIM
     summary.classList.toggle('warn', tooBig)
     summary.innerHTML =
-      `<b>${usable.length}</b> atlas (1 por animação) · <b>${total}</b> frames<br>` +
+      `<b>${usable.length}</b> atlas (1 por animação) · <b>${total}</b> frames (com correções)<br>` +
       `maior atlas <b>${maxW}×${maxH}px</b>` +
       (tooBig ? '<br>⚠ atlas acima de 16384px — reduza a escala' : '')
   }
@@ -325,6 +554,31 @@ export function initSprites(): () => void {
   // ── geração + persistência ──────────────────────────────
   const genBtn = $<HTMLButtonElement>('#sp-generate')
   genBtn.onclick = () => void generate()
+
+  /** proposta de escala que faz o atlas caber no limite (criada/atualizada) */
+  function ensureScaleProposal(maxSide: number, effScale: number): void {
+    const sugg = Math.max(0.05, Math.floor(((MAX_SHEET_DIM - 64) / maxSide) * effScale * 100) / 100)
+    const label = `atlas acima de ${MAX_SHEET_DIM}px após as correções — escala ${sugg}× faz caber`
+    const existing = corrections.find((c) => c.kind === 'escala')
+    if (existing) {
+      existing.params = { escala: sugg }
+      existing.label = label
+      existing.severity = 'critico'
+      existing.accepted = false
+    } else {
+      corrections.push({
+        id: 'escala:projeto',
+        kind: 'escala',
+        severity: 'critico',
+        target: { scope: 'projeto' },
+        label,
+        params: { escala: sugg },
+        accepted: false,
+        adjusted: false,
+      })
+    }
+    renderCorrections()
+  }
 
   async function generate(): Promise<void> {
     if (!ready || preparing) {
@@ -336,25 +590,57 @@ export function initSprites(): () => void {
       toast('NENHUM FRAME PARA EXPORTAR', true)
       return
     }
-    const cell = cellDims()
-    for (const it of usable) {
-      const l = computeLayout(it.loop.length, cell.W, cell.H, exp)
-      if (l.width > MAX_SHEET_DIM || l.height > MAX_SHEET_DIM) {
-        toast(`ATLAS DE "${it.a.name}" GRANDE DEMAIS — REDUZA A ESCALA`, true)
-        return
-      }
+
+    // overrides das correções aceitas
+    const g = globalEff()
+    const effScale = g.scale ?? exp.scale
+    const effColors = g.colors ?? exp.colors
+    const effMargin = g.margin ?? project.alignCfg.margin
+    const cell = cellDims(g.margin)
+    const layoutOpts = { scale: effScale, padding: exp.padding, columns: exp.columns }
+
+    // plano por animação: loop efetivo (crossfade corrigido) + frames mantidos
+    interface Plan {
+      it: Item
+      loop: Loop
+      kept: number[]
+      layout: ReturnType<typeof computeLayout>
+      eff: AnimEff
     }
+    const plans: Plan[] = []
+    let maxSide = 0
+    for (const it of usable) {
+      const eff = effFor(it.a.id)
+      let loop = it.loop
+      if (eff.crossfade != null && eff.crossfade !== it.a.crossfade) {
+        const contiguous = it.selIdx.length > 0 && it.selIdx[it.selIdx.length - 1] - it.selIdx[0] === it.selIdx.length - 1
+        loop = createLoop(proc, it.sel, it.a.chroma, eff.crossfade, contiguous ? it.a.drift ?? null : null)
+      }
+      const kept: number[] = []
+      for (let p = 0; p < loop.length; p++) if (!eff.removed.has(p)) kept.push(p)
+      if (!kept.length) kept.push(0)
+      const layout = computeLayout(kept.length, cell.W, cell.H, layoutOpts)
+      maxSide = Math.max(maxSide, layout.width, layout.height)
+      plans.push({ it, loop, kept, layout, eff })
+    }
+
+    // revalida o limite DEPOIS de aplicar as correções aceitas
+    if (maxSide > MAX_SHEET_DIM) {
+      ensureScaleProposal(maxSide, effScale)
+      toast('ATLAS ACIMA DE 16384PX APÓS AS CORREÇÕES — ACEITE A PROPOSTA DE ESCALA', true)
+      return
+    }
+
     genBtn.disabled = true
     try {
       const used = new Set<string>()
       const anims: SheetAnimMeta[] = []
       const blobs: Blob[] = []
       let total = 0
-      for (let i = 0; i < usable.length; i++) {
-        const it = usable[i]
-        genBtn.textContent = `GERANDO ${i + 1}/${usable.length}...`
+      for (let i = 0; i < plans.length; i++) {
+        const { it, loop, layout, eff, kept } = plans[i]
+        genBtn.textContent = `GERANDO ${i + 1}/${plans.length}...`
         const slug = uniqueSlug(it.a.name, used)
-        const layout = computeLayout(it.loop.length, cell.W, cell.H, exp)
         const atlas = document.createElement('canvas')
         atlas.width = layout.width
         atlas.height = layout.height
@@ -362,37 +648,48 @@ export function initSprites(): () => void {
         const cellCv = document.createElement('canvas')
         cellCv.width = layout.cellW
         cellCv.height = layout.cellH
-        const cctx = cellCv.getContext('2d')!
-        const gs = exp.scale
-        const s = it.a.align.scale
+        const cctx = cellCv.getContext('2d', { willReadFrequently: eff.cleanAlpha != null })!
+        const gs = effScale
+        const s = it.a.align.scale * eff.scaleMul
         const { ax, ay } = anchorOf(it.a, it.bounds!)
+        const durOf = (p: number): number => {
+          const mult = it.a.speed[it.selIdx[loop.k + p]] ?? 1
+          return Math.round(1000 / (it.a.fps * mult))
+        }
         const durations: number[] = []
-        const kept: number[] = []
-        for (let p = 0; p < it.loop.length; p++) {
-          const frame = it.loop.render(p)
+        let pending = 0 // duração de removidos antes do 1º frame mantido
+        const removing = kept.length < loop.length
+        for (let p = 0; p < loop.length; p++) {
+          if (removing && eff.removed.has(p)) {
+            // frame removido: a duração soma no frame mantido anterior
+            if (durations.length) durations[durations.length - 1] += durOf(p)
+            else pending += durOf(p)
+            continue
+          }
+          const frame = loop.render(p)
           cctx.clearRect(0, 0, layout.cellW, layout.cellH)
           cctx.imageSmoothingEnabled = s * gs < 1
           cctx.imageSmoothingQuality = 'high'
           cctx.drawImage(
             frame,
-            (cell.px - ax * s) * gs,
-            (cell.py - ay * s) * gs,
+            (cell.px - (ax + eff.dx) * s) * gs,
+            (cell.py - (ay + eff.dy) * s) * gs,
             frame.width * s * gs,
             frame.height * s * gs,
           )
-          const idx = kept.length
+          if (eff.cleanAlpha != null) cleanOrphans(cctx, layout.cellW, layout.cellH, eff.cleanAlpha)
+          const idx = durations.length
           const col = idx % layout.cols
           const row = Math.floor(idx / layout.cols)
           atx.drawImage(cellCv, layout.padding + col * (layout.cellW + layout.padding), layout.padding + row * (layout.cellH + layout.padding))
-          const mult = it.a.speed[it.selIdx[it.loop.k + p]] ?? 1
-          durations.push(Math.round(1000 / (it.a.fps * mult)))
-          kept.push(p)
+          durations.push(durOf(p) + pending)
+          pending = 0
           if (p % 8 === 7) await new Promise((r) => setTimeout(r, 0))
           if (!alive) return // aborto: nenhum registro parcial é persistido
         }
         let blob: Blob
         try {
-          blob = await encodeCanvas(atlas, exp.colors)
+          blob = await encodeCanvas(atlas, effColors)
         } catch {
           throw new Error(`falha ao codificar o PNG de "${it.a.name}"`)
         }
@@ -402,9 +699,9 @@ export function initSprites(): () => void {
           animId: it.a.id,
           name: it.a.name,
           slug,
-          frameCount: kept.length,
+          frameCount: durations.length,
           fps: it.a.fps,
-          crossfade: it.loop.k,
+          crossfade: loop.k,
           columns: layout.cols,
           rows: layout.rows,
           width: layout.width,
@@ -427,10 +724,16 @@ export function initSprites(): () => void {
           h: cell.H,
           pivotX: project.alignCfg.pivotX,
           pivotY: project.alignCfg.pivotY,
-          margin: project.alignCfg.margin,
+          margin: effMargin,
         },
-        exportCfg: { ...exp },
-        corrections: [],
+        exportCfg: { scale: effScale, padding: exp.padding, colors: effColors, columns: exp.columns },
+        corrections: corrections
+          .filter((c) => c.accepted)
+          .map((c) => ({
+            ...c,
+            target: { ...c.target, frames: c.target.frames ? [...c.target.frames] : undefined },
+            params: { ...c.params },
+          })),
         anims,
         blobs,
         stateHash: animStateHash(project),
@@ -527,6 +830,7 @@ export function initSprites(): () => void {
   return () => {
     alive = false
     clearTimeout(saveTimer)
+    clearTimeout(analyzeTimer)
     document.removeEventListener('keydown', onKey)
     window.removeEventListener('resize', resizeCanvas)
   }

@@ -704,6 +704,42 @@ input[type="range"]::-moz-range-thumb {
 .check-row input { accent-color: var(--acid); width: 14px; height: 14px; }
 .panel-title .warn { color: var(--amber); }
 
+/* ── Propostas de correção (área SPRITES) ───────────────── */
+.sp-corrections { max-height: 300px; }
+
+.corr-row {
+  display: flex; flex-direction: column; gap: 6px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-bright);
+  background: var(--panel2);
+  padding: 8px 10px;
+}
+.corr-row.on { border-left-color: var(--acid); }
+
+.corr-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.corr-toggle { min-width: 72px; }
+.corr-label { font-size: 11px; line-height: 1.5; color: var(--text); }
+.corr-savings { font-size: 10px; }
+
+.corr-sev {
+  font-family: var(--font-pix); font-size: 8px;
+  padding: 2px 6px;
+  letter-spacing: 0.08em;
+}
+.sev-info { color: var(--dim); border: 1px solid var(--line-bright); }
+.sev-aviso { color: var(--amber); border: 1px solid var(--amber); }
+.sev-critico { color: #ff6b5e; border: 1px solid #ff6b5e; }
+
+.corr-param { flex-direction: row; align-items: center; gap: 6px; margin-left: auto; }
+.corr-param .num-mini { width: 70px; }
+
+.ver-stale {
+  font-family: var(--font-pix); font-size: 8px;
+  color: var(--amber); border: 1px solid var(--amber);
+  padding: 2px 6px;
+  letter-spacing: 0.08em;
+}
+
 /* ── Busy overlay ───────────────────────────────────────── */
 .busy {
   position: fixed; inset: 0; z-index: 9000;

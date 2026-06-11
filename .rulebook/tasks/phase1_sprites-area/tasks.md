@@ -22,9 +22,9 @@
 
 ## 4. Propostas e geração com correções
 
-- [ ] 4.1 `src/sprites.ts`: painel de propostas — listar `Correction[]` com severidade/impacto em pt-BR; aceitar, rejeitar e ajustar parâmetros; estado vazio "nenhuma correção sugerida" permite gerar mesmo assim
-- [ ] 4.2 `src/sprites.ts`: aplicar correções aceitas na rasterização da célula (pós-processo no canvas da célula antes do encode; remoção de frame = omissão no atlas, sem tocar `anim.selected`); registrar correções aplicadas (com parâmetros ajustados) no `SpriteSheet`
-- [ ] 4.3 `src/sprites.ts`: revalidar `MAX_SHEET_DIM` por animação após correções aceitas; propor correção de escala automática quando exceder; bloquear com aviso pt-BR se ainda exceder; falha de `encodeCanvas` tratada por animação sem persistir registro parcial
+- [x] 4.1 `src/sprites.ts`: painel de propostas — `Correction[]` com severidade/impacto em pt-BR; aceitar/rejeitar (toggle), ajustar parâmetro (marca `adjusted`); estado vazio "nenhuma correção sugerida" permite gerar; REANALISAR preserva decisões; preview reflete escala/posição/remoções aceitas
+- [x] 4.2 `src/sprites.ts`: correções aplicadas na rasterização da célula (`effFor`/`globalEff`/`cleanOrphans`; remoção de frame = omissão no atlas com duração somada no anterior, sem tocar `anim.selected`; crossfade corrigido recompõe o loop só na geração); correções aceitas registradas no `SpriteSheet` com params finais
+- [x] 4.3 `src/sprites.ts`: `MAX_SHEET_DIM` revalidado após as correções; proposta de escala automática (`ensureScaleProposal`, severidade crítico) quando excede; falha de `encodeCanvas` identificada por animação, sem registro parcial
 
 ## 5. Versões: persistir, baixar, regerar, reverter
 
