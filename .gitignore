@@ -24,3 +24,33 @@ Thumbs.db
 
 .openrouter-key
 ref-test.png
+
+# Rulebook - ignore runtime data, keep specs and tasks
+/.rulebook/*
+!/.rulebook/specs/
+!/.rulebook/tasks/
+!/.rulebook/tasks/**/*.md
+!/.rulebook/rulebook.json
+
+# Patterns added by @hivellm/rulebook
+# Added at: 2026-06-11T15:58:29.726Z
+
+*.swo
+*.swp
+*.tsbuildinfo
+*.tsbuildinfo.*
+*~
+.cache/
+.env.*.local
+.env.local
+.tsc/
+build/
+logs/
+out/
+temp/
+tmp/
+
+CLAUDE.local.md
+.rulebook/backup/
+.rulebook/handoff/_pending.md
+.rulebook/handoff/.urgent

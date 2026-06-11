@@ -1,0 +1,38 @@
+{
+  "version": "6.0.0",
+  "installedAt": "2026-06-11T15:58:29.430Z",
+  "updatedAt": "2026-06-11T15:58:29.532Z",
+  "projectId": "fc51ef9a-ab1b-4dbb-b325-4340aa9b6fe0",
+  "mode": "full",
+  "features": {
+    "logging": true,
+    "gitHooks": false,
+    "templates": false,
+    "context": false,
+    "health": false,
+    "parallel": false,
+    "smartContinue": false
+  },
+  "coverageThreshold": 95,
+  "language": "en",
+  "outputLanguage": "en",
+  "cliTools": [],
+  "maxParallelTasks": 1,
+  "timeouts": {
+    "taskExecution": 300000,
+    "cliResponse": 60000,
+    "testRun": 120000
+  },
+  "agentsMode": "lean",
+  "monorepo": {
+    "detected": false,
+    "tool": null,
+    "packages": []
+  },
+  "languages": [
+    "typescript"
+  ],
+  "modules": [],
+  "modular": true,
+  "rulebookDir": ".rulebook"
+}
