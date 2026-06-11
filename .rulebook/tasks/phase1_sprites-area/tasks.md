@@ -28,9 +28,9 @@
 
 ## 5. Versões: persistir, baixar, regerar, reverter
 
-- [ ] 5.1 `src/sprites.ts`: persistir geração no store `spritesheets` com `version` incremental e metadados completos; lista de versões com resumo; excluir versão mantém as demais
-- [ ] 5.2 `src/sprites.ts` + `package.json`: download em ZIP único (fflate) com PNGs por animação + manifesto regenerado dos metadados (`meta.version = 4`, slugs desambiguados com sufixo `_2` consistentes entre manifesto e imagens)
-- [ ] 5.3 `src/sprites.ts`: regerar a partir dos metadados salvos (animação removida/alterada → reporta divergência sem travar); detecção de stale via hash com aviso "precisa regerar" nas versões desatualizadas
+- [x] 5.1 `src/sprites.ts`: geração persistida no store `spritesheets` com `version` incremental e metadados completos; lista de versões com resumo (data, atlas, bytes, correções no tooltip); excluir versão mantém as demais
+- [x] 5.2 `src/sprites.ts` + `package.json`: download em ZIP único (fflate, level 0) com PNGs por animação + manifesto regenerado dos metadados (`meta.version = 4`, slugs desambiguados via `uniqueSlug` consistentes entre manifesto e imagens)
+- [x] 5.3 `src/sprites.ts`: REGERAR aplica exportCfg + correções salvas numa nova versão (animação ausente → reporta divergência sem travar); selo DESATUALIZADO via `animStateHash` quando as animações mudaram após a geração
 
 ## 6. Tail (mandatory — enforced by rulebook v5.3.0)
 

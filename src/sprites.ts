@@ -5,14 +5,15 @@
  * permite baixar (ZIP), regerar e excluir versões.
  */
 
+import { strToU8, zipSync } from 'fflate'
 import { detectAll, sampleFromCanvas, type AnimInput, type FrameSample } from './analyze'
 import { ChromaProcessor } from './chroma'
 import { deleteSheet, listSheets, putSheet, QuotaError, uid } from './db'
-import { computeLayout, encodeCanvas, formatBytes, MAX_SHEET_DIM, uniqueSlug } from './export'
+import { buildManifest, computeLayout, downloadBlob, encodeCanvas, formatBytes, MAX_SHEET_DIM, slugify, uniqueSlug } from './export'
 import { createLoop, type Loop } from './loop'
 import { animStateHash, ensureFrames, saveProject, selectedBitmaps, state } from './state'
 import { toast } from './toast'
-import type { AnimationData, Correction, SheetAnimMeta, SpriteSheet } from './types'
+import type { AnimationData, Correction, ExportCfg, SheetAnimMeta, SpriteSheet } from './types'
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T =>
   document.querySelector(sel) as T
@@ -292,9 +293,9 @@ export function initSprites(): () => void {
   }
 
   /** overrides de geração derivados das correções aceitas (por animação) */
-  function effFor(animId: string): AnimEff {
+  function effFor(animId: string, corrs: Correction[] = corrections): AnimEff {
     const e: AnimEff = { scaleMul: 1, dx: 0, dy: 0, removed: new Set(), crossfade: null, cleanAlpha: null }
-    for (const c of corrections) {
+    for (const c of corrs) {
       if (!c.accepted || c.target.animId !== animId) continue
       switch (c.kind) {
         case 'proporcao':
@@ -327,9 +328,9 @@ export function initSprites(): () => void {
   }
 
   /** overrides de escopo do projeto (margem/cores/escala) */
-  function globalEff(): { margin: number | null; colors: number | null; scale: number | null } {
+  function globalEff(corrs: Correction[] = corrections): { margin: number | null; colors: number | null; scale: number | null } {
     const g: { margin: number | null; colors: number | null; scale: number | null } = { margin: null, colors: null, scale: null }
-    for (const c of corrections) {
+    for (const c of corrs) {
       if (!c.accepted || c.target.scope !== 'projeto') continue
       if (c.kind === 'recorte') g.margin = Math.max(0, Math.round(c.params.margem ?? 8))
       else if (c.kind === 'quantizacao') g.colors = Math.round(c.params.cores ?? 256)
@@ -580,7 +581,7 @@ export function initSprites(): () => void {
     renderCorrections()
   }
 
-  async function generate(): Promise<void> {
+  async function generate(genCorr: Correction[] = corrections, genExp: ExportCfg = exp): Promise<void> {
     if (!ready || preparing) {
       toast('AGUARDE AS ANIMAÇÕES CARREGAREM')
       return
@@ -592,12 +593,12 @@ export function initSprites(): () => void {
     }
 
     // overrides das correções aceitas
-    const g = globalEff()
-    const effScale = g.scale ?? exp.scale
-    const effColors = g.colors ?? exp.colors
+    const g = globalEff(genCorr)
+    const effScale = g.scale ?? genExp.scale
+    const effColors = g.colors ?? genExp.colors
     const effMargin = g.margin ?? project.alignCfg.margin
     const cell = cellDims(g.margin)
-    const layoutOpts = { scale: effScale, padding: exp.padding, columns: exp.columns }
+    const layoutOpts = { scale: effScale, padding: genExp.padding, columns: genExp.columns }
 
     // plano por animação: loop efetivo (crossfade corrigido) + frames mantidos
     interface Plan {
@@ -610,7 +611,7 @@ export function initSprites(): () => void {
     const plans: Plan[] = []
     let maxSide = 0
     for (const it of usable) {
-      const eff = effFor(it.a.id)
+      const eff = effFor(it.a.id, genCorr)
       let loop = it.loop
       if (eff.crossfade != null && eff.crossfade !== it.a.crossfade) {
         const contiguous = it.selIdx.length > 0 && it.selIdx[it.selIdx.length - 1] - it.selIdx[0] === it.selIdx.length - 1
@@ -626,8 +627,12 @@ export function initSprites(): () => void {
 
     // revalida o limite DEPOIS de aplicar as correções aceitas
     if (maxSide > MAX_SHEET_DIM) {
-      ensureScaleProposal(maxSide, effScale)
-      toast('ATLAS ACIMA DE 16384PX APÓS AS CORREÇÕES — ACEITE A PROPOSTA DE ESCALA', true)
+      if (genCorr === corrections) {
+        ensureScaleProposal(maxSide, effScale)
+        toast('ATLAS ACIMA DE 16384PX APÓS AS CORREÇÕES — ACEITE A PROPOSTA DE ESCALA', true)
+      } else {
+        toast('ATLAS ACIMA DE 16384PX COM OS PARÂMETROS SALVOS — AS ANIMAÇÕES MUDARAM', true)
+      }
       return
     }
 
@@ -726,8 +731,8 @@ export function initSprites(): () => void {
           pivotY: project.alignCfg.pivotY,
           margin: effMargin,
         },
-        exportCfg: { scale: effScale, padding: exp.padding, colors: effColors, columns: exp.columns },
-        corrections: corrections
+        exportCfg: { scale: effScale, padding: genExp.padding, colors: effColors, columns: genExp.columns },
+        corrections: genCorr
           .filter((c) => c.accepted)
           .map((c) => ({
             ...c,
@@ -757,6 +762,39 @@ export function initSprites(): () => void {
   }
 
   // ── versões salvas ──────────────────────────────────────
+
+  /** ZIP único: PNGs por animação + manifesto regenerado dos metadados */
+  async function downloadZip(sh: SpriteSheet): Promise<void> {
+    const pslug = slugify(project.name)
+    const files: Record<string, Uint8Array> = {}
+    for (let i = 0; i < sh.anims.length; i++) {
+      files[`${pslug}_${sh.anims[i].slug}.png`] = new Uint8Array(await sh.blobs[i].arrayBuffer())
+    }
+    files[`${pslug}.json`] = strToU8(buildManifest(project.name, sh))
+    const zipped = zipSync(files, { level: 0 }) // PNGs já estão comprimidos
+    downloadBlob(new Blob([zipped], { type: 'application/zip' }), `${pslug}_v${sh.version}.zip`)
+    toast(`ZIP DA VERSÃO ${sh.version} BAIXADO ✓`)
+  }
+
+  /** regera uma nova versão com os parâmetros e correções salvos */
+  async function regenerate(sh: SpriteSheet): Promise<void> {
+    if (!ready || preparing) {
+      toast('AGUARDE AS ANIMAÇÕES CARREGAREM')
+      return
+    }
+    const missing = sh.anims.filter((am) => !items.some((it) => it.a.id === am.animId && it.bounds))
+    if (missing.length) {
+      toast(`DIVERGÊNCIA: ${missing.map((m) => m.name).join(', ')} NÃO ESTÁ MAIS DISPONÍVEL — REGERANDO COM AS ATUAIS`, true)
+    }
+    const corrs = sh.corrections.map((c) => ({
+      ...c,
+      accepted: true,
+      target: { ...c.target, frames: c.target.frames ? [...c.target.frames] : undefined },
+      params: { ...c.params },
+    }))
+    await generate(corrs, sh.exportCfg)
+  }
+
   function renderVersions(): void {
     const box = $('#sp-versions')
     box.innerHTML = ''
@@ -768,6 +806,7 @@ export function initSprites(): () => void {
       box.append(hint)
       return
     }
+    const currentHash = animStateHash(project)
     for (const sh of [...sheets].sort((a, b) => b.version - a.version)) {
       const row = document.createElement('div')
       row.className = 'align-row'
@@ -775,7 +814,25 @@ export function initSprites(): () => void {
       name.className = 'ar-name'
       const bytes = sh.blobs.reduce((m, b) => m + b.size, 0)
       name.textContent = `v${sh.version} · ${new Date(sh.createdAt).toLocaleDateString('pt-BR')} · ${sh.anims.length} atlas · ${formatBytes(bytes)}`
+      name.title = `célula ${sh.cell.w}×${sh.cell.h} · escala ${sh.exportCfg.scale}× · ${sh.corrections.length} correção(ões) aplicada(s)`
       row.append(name)
+      if (sh.stateHash !== currentHash) {
+        const stale = document.createElement('span')
+        stale.className = 'ver-stale'
+        stale.textContent = 'DESATUALIZADO'
+        stale.title = 'as animações mudaram depois desta geração — regere'
+        row.append(stale)
+      }
+      const zip = document.createElement('button')
+      zip.className = 'btn btn-small'
+      zip.textContent = 'ZIP_'
+      zip.title = 'baixar PNGs + manifesto num único .zip'
+      zip.onclick = () => void downloadZip(sh)
+      const regen = document.createElement('button')
+      regen.className = 'btn btn-small'
+      regen.textContent = 'REGERAR'
+      regen.title = 'gera uma nova versão com os parâmetros e correções desta'
+      regen.onclick = () => void regenerate(sh)
       const del = document.createElement('button')
       del.className = 'btn btn-small danger'
       del.textContent = 'X'
@@ -785,7 +842,7 @@ export function initSprites(): () => void {
         sheets = sheets.filter((s2) => s2.id !== sh.id)
         renderVersions()
       }
-      row.append(del)
+      row.append(zip, regen, del)
       box.append(row)
     }
   }
