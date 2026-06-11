@@ -597,6 +597,12 @@ input[type="range"]::-moz-range-thumb {
   padding-right: 4px;
 }
 .align-row { display: flex; align-items: end; gap: 8px; }
+.align-row .ar-check {
+  flex: none; width: 15px; height: 15px; margin-bottom: 7px;
+  accent-color: var(--acid); cursor: pointer;
+}
+.align-row.off { opacity: 0.4; }
+.align-row.off .ar-check { opacity: 1; }
 .align-row .ar-name {
   flex: 1; min-width: 0;
   font-family: var(--font-pix); font-size: 10px;

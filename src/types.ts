@@ -33,6 +33,8 @@ export interface AnimationData {
   crossfade: number
   fps: number
   align: AnimAlign
+  /** incluir esta animação na exportação do atlas? (ausente = sim, p/ projetos antigos) */
+  exportEnabled?: boolean
   thumb: Blob | null
 }
 

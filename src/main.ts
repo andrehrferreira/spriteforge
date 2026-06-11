@@ -402,6 +402,7 @@ $<HTMLButtonElement>('#btn-extract').onclick = async () => {
       crossfade: 0,
       fps,
       align: { dx: 0, dy: 0, scale: 1 },
+      exportEnabled: true,
       thumb: await makeThumbBlob(result.frames),
     }
     state.frames.set(anim.id, result.frames)
