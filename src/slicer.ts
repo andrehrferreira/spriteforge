@@ -296,6 +296,21 @@ export function initSlicer(): () => void {
     $('#sl-threshold-val').textContent = thrInput.value
   }
 
+  // fundo do preview (transparente/preto/branco) — afeta o canvas e o
+  // preview do item, para testar o recorte sobre qualquer base
+  document.querySelectorAll<HTMLButtonElement>('[data-slbg]').forEach((btn) => {
+    btn.onclick = () => {
+      document.querySelectorAll('[data-slbg]').forEach((b) => b.classList.remove('active'))
+      btn.classList.add('active')
+      const bg = btn.dataset.slbg
+      const cls = bg === 'black' ? 'bg-black' : bg === 'white' ? 'bg-white' : 'checker'
+      wrap.className = `preview-wrap align-wrap ${cls}`
+      const item = $('.sl-item-preview')
+      item.classList.remove('bg-black', 'bg-white')
+      if (cls !== 'checker') item.classList.add(cls)
+    }
+  })
+
   // ── carregar imagem ─────────────────────────────────────
   const fileInput = $<HTMLInputElement>('#sl-file')
   $('#sl-add').onclick = () => fileInput.click()

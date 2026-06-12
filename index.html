@@ -554,7 +554,13 @@
           </div>
         </div>
         <input type="file" id="sl-file" accept="image/*" hidden />
-        <div class="frames-hint dim">clique seleciona &middot; arraste move &middot; alça no canto redimensiona &middot; arraste no vazio cria caixa &middot; Delete exclui</div>
+        <div class="frames-hint dim">clique seleciona &middot; arraste move &middot; alça no canto redimensiona &middot; arraste no vazio cria caixa &middot; Delete exclui
+          <span class="chip-group push-right" title="fundo do preview">
+            <button class="chip bg-chip bg-checker active" data-slbg="checker"></button>
+            <button class="chip bg-chip sl-bg-black" data-slbg="black" title="fundo preto"></button>
+            <button class="chip bg-chip sl-bg-white" data-slbg="white" title="fundo branco"></button>
+          </span>
+        </div>
         <div id="sl-wrap" class="preview-wrap checker align-wrap">
           <canvas id="sl-canvas"></canvas>
         </div>
