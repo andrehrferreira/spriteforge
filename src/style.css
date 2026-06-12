@@ -636,9 +636,12 @@ input[type="range"]::-moz-range-thumb {
 /* ── Atlas de ícones ────────────────────────────────────── */
 .at-grid {
   display: flex; flex-wrap: wrap; gap: 8px;
-  max-height: 220px; overflow-y: auto;
-  margin-bottom: 12px;
+  height: 280px; /* caixa fixa: a biblioteca rola, o preview não encolhe */
+  overflow-y: auto;
   align-content: start;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  padding: 8px;
 }
 .at-cell {
   position: relative;
