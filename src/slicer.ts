@@ -263,6 +263,7 @@ export function fitRect(box: Box, out: number, marginPct: number): { dx: number;
 export function initSlicer(): () => void {
   let alive = true
   let src: HTMLCanvasElement | null = null // imagem de trabalho (fundo removido)
+  let trimMask: Uint8Array | null = null // alpha >= 8: para aparar o corte
   let baseName = 'item'
   let boxes: Box[] = []
   let selected = -1
@@ -318,6 +319,11 @@ export function initSlicer(): () => void {
       nameInput.value = baseName
       src = prepareSource(bmp)
       bmp.close()
+      // máscara de conteúdo visível (alpha baixo conta): apara o corte na
+      // composição para o item ocupar o quadro inteiro
+      const d = src.getContext('2d')!.getImageData(0, 0, src.width, src.height).data
+      trimMask = new Uint8Array(src.width * src.height)
+      for (let i = 0; i < trimMask.length; i++) trimMask[i] = d[i * 4 + 3] >= 8 ? 1 : 0
       detect()
       toast(`${boxes.length} ITENS DETECTADOS`)
     } catch (err) {
@@ -549,7 +555,22 @@ export function initSlicer(): () => void {
   const selW = $<HTMLInputElement>('#sl-w')
   const selH = $<HTMLInputElement>('#sl-h')
 
-  // preview 1:1 do item como sairá no export (encaixe + margem + centro)
+  /** apara a caixa ao conteúdo visível dentro dela (e clampa na folha) */
+  function trimmedBox(b: Box): Box {
+    if (!src) return b
+    const x = Math.max(0, Math.round(b.x))
+    const y = Math.max(0, Math.round(b.y))
+    const clamped: Box = {
+      x,
+      y,
+      w: Math.max(1, Math.min(src.width, Math.round(b.x + b.w)) - x),
+      h: Math.max(1, Math.min(src.height, Math.round(b.y + b.h)) - y),
+    }
+    if (!trimMask) return clamped
+    return tightenBox(trimMask, src.width, clamped) ?? clamped
+  }
+
+  // preview 1:1 do item como sairá no export (apara + encaixe + centro)
   const itemCv = $<HTMLCanvasElement>('#sl-item-canvas')
   const itemCtx = itemCv.getContext('2d')!
 
@@ -561,15 +582,17 @@ export function initSlicer(): () => void {
     }
     itemCtx.clearRect(0, 0, out, out)
     const b = selected >= 0 ? boxes[selected] : null
-    $('#sl-item-meta').textContent = b
-      ? `saída ${out}×${out}px · caixa ${b.w}×${b.h}px`
-      : 'clique numa caixa para ver o resultado final'
-    if (!b || !src) return
+    if (!b || !src) {
+      $('#sl-item-meta').textContent = 'clique numa caixa para ver o resultado final'
+      return
+    }
+    const tb = trimmedBox(b)
+    $('#sl-item-meta').textContent = `saída ${out}×${out}px · corte ${tb.w}×${tb.h}px (aparado)`
     const marginPct = Math.max(0, Math.min(40, Number(marginInput.value) || 0))
-    const f = fitRect(b, out, marginPct)
+    const f = fitRect(tb, out, marginPct)
     itemCtx.imageSmoothingEnabled = true
     itemCtx.imageSmoothingQuality = 'high'
-    itemCtx.drawImage(src, b.x, b.y, b.w, b.h, f.dx, f.dy, f.dw, f.dh)
+    itemCtx.drawImage(src, tb.x, tb.y, tb.w, tb.h, f.dx, f.dy, f.dw, f.dh)
   }
 
   function syncSelInputs(): void {
@@ -629,14 +652,15 @@ export function initSlicer(): () => void {
       for (let i = 0; i < ordered.length; i++) {
         exportBtn.textContent = `GERANDO ${i + 1}/${ordered.length}...`
         const b = ordered[i]
+        const tb = trimmedBox(b)
         const c = document.createElement('canvas')
         c.width = out
         c.height = out
         const cx = c.getContext('2d')!
-        const f = fitRect(b, out, marginPct)
+        const f = fitRect(tb, out, marginPct)
         cx.imageSmoothingEnabled = true
         cx.imageSmoothingQuality = 'high'
-        cx.drawImage(src, b.x, b.y, b.w, b.h, f.dx, f.dy, f.dw, f.dh)
+        cx.drawImage(src, tb.x, tb.y, tb.w, tb.h, f.dx, f.dy, f.dw, f.dh)
         const blob = await encodeCanvas(c, colors)
         files[`${base}_${String(i + 1).padStart(3, '0')}.png`] = new Uint8Array(await blob.arrayBuffer())
         if (i % 8 === 7) await new Promise((r) => setTimeout(r, 0))
