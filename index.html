@@ -113,19 +113,39 @@
             </section>
 
             <div class="panel new-proj">
-                <span class="field-label">NOVO PROJETO</span>
-                <div class="cfg-row">
-                    <input
-                        id="new-proj-name"
-                        class="text-input"
-                        placeholder="nome do projeto (ex: heroi)"
-                        spellcheck="false"
-                    />
-                    <button id="btn-create" class="btn btn-primary">CRIAR_</button>
+                <div class="home-toolbar">
+                    <div class="ht-group">
+                        <span class="field-label">NOVO PROJETO</span>
+                        <div class="cfg-row tight">
+                            <input
+                                id="new-proj-name"
+                                class="text-input"
+                                placeholder="nome do projeto (ex: heroi)"
+                                spellcheck="false"
+                            />
+                            <button id="btn-create" class="btn btn-primary">CRIAR_</button>
+                        </div>
+                    </div>
+                    <div class="ht-group ht-search">
+                        <span class="field-label">BUSCAR</span>
+                        <div class="cfg-row tight">
+                            <input
+                                id="home-search"
+                                class="text-input"
+                                placeholder="filtrar por nome..."
+                                spellcheck="false"
+                            />
+                            <select id="home-sort" title="ordenação">
+                                <option value="recent" selected>recentes</option>
+                                <option value="name">A–Z</option>
+                            </select>
+                        </div>
+                    </div>
+                    <span id="home-count" class="dim ht-count"></span>
                 </div>
             </div>
 
-            <div id="project-list" class="proj-list"></div>
+            <div id="project-list" class="proj-grid"></div>
         </main>
 
         <!-- ════ TELA: GERADOR DE IMAGEM ════ -->

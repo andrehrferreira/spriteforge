@@ -4,7 +4,14 @@
 
 import './style.css'
 import { initAlign } from './align'
-import { backupAvailable, deleteBackup, listBackups, restoreBackup, uploadBackup } from './backup'
+import {
+    backupAvailable,
+    deleteBackup,
+    listBackups,
+    restoreBackup,
+    uploadBackup,
+    type BackupMeta,
+} from './backup'
 import { initAtlas } from './atlas'
 import { initGenImage } from './genimage'
 import { initGenVideo } from './genvideo'
@@ -92,6 +99,9 @@ function busyHide(): void {
 
 // ════ HOME ═══════════════════════════════════════════════
 
+let homeProjects: ProjectData[] = []
+let homeBackups: BackupMeta[] = []
+
 async function goHome(): Promise<void> {
     show('home')
     setNav(null)
@@ -99,124 +109,146 @@ async function goHome(): Promise<void> {
     state.project = null
     state.frames.clear()
 
-    const listEl = $('#project-list')
-    listEl.innerHTML = ''
-    let projects: ProjectData[] = []
     try {
-        projects = await listProjects()
+        homeProjects = await listProjects()
     } catch (err) {
         console.error(err)
+        homeProjects = []
         toast('FALHA AO LER OS PROJETOS SALVOS', true)
     }
-    projects.sort((a, b) => b.updatedAt - a.updatedAt)
-
     // backups no servidor local que não existem neste navegador
-    const known = new Set(projects.map((p) => p.id))
-    const backups = (await listBackups()).filter((b) => !known.has(b.id))
-    for (const b of backups) {
-        const card = document.createElement('div')
-        card.className = 'proj-card backup-card'
-        const name = document.createElement('span')
-        name.className = 'pc-name'
-        name.textContent = b.name
-        const meta = document.createElement('span')
-        meta.className = 'pc-meta'
-        meta.textContent = `backup no servidor · ${new Date(b.updatedAt).toLocaleDateString('pt-BR')} · ${(b.size / 1048576).toFixed(1)} MB`
-        const restore = document.createElement('button')
-        restore.className = 'btn btn-small'
-        restore.textContent = 'RESTAURAR_'
-        restore.onclick = async () => {
-            busyShow('RESTAURANDO DO SERVIDOR...')
-            try {
-                const p = await restoreBackup(b.id)
-                toast('PROJETO RESTAURADO ✓')
-                openProject(p)
-            } catch (err) {
-                console.error(err)
-                toast('FALHA AO RESTAURAR O BACKUP', true)
-            } finally {
-                busyHide()
-            }
-        }
-        const del = document.createElement('button')
-        del.className = 'btn btn-small danger'
-        del.textContent = 'X'
-        del.title = 'excluir backup do servidor'
-        del.onclick = async () => {
-            if (!confirm(`Excluir o backup "${b.name}" do servidor?`)) return
-            await deleteBackup(b.id)
-            void goHome()
-        }
-        const top = document.createElement('div')
-        top.className = 'pc-top'
-        top.append(name, meta, restore, del)
-        card.append(top)
-        listEl.append(card)
-    }
+    const known = new Set(homeProjects.map((p) => p.id))
+    homeBackups = (await listBackups()).filter((b) => !known.has(b.id))
+    renderHomeList()
+}
 
-    if (!projects.length && !backups.length) {
+function renderHomeList(): void {
+    const grid = $('#project-list')
+    grid.innerHTML = ''
+    const q = $<HTMLInputElement>('#home-search').value.trim().toLowerCase()
+    const sort = $<HTMLSelectElement>('#home-sort').value
+
+    const projs = q ? homeProjects.filter((p) => p.name.toLowerCase().includes(q)) : [...homeProjects]
+    projs.sort(
+        sort === 'name' ? (a, b) => a.name.localeCompare(b.name) : (a, b) => b.updatedAt - a.updatedAt,
+    )
+    const backs = q ? homeBackups.filter((b) => b.name.toLowerCase().includes(q)) : homeBackups
+
+    $('#home-count').textContent =
+        `${projs.length}/${homeProjects.length} projetos` +
+        (backs.length ? ` · ${backs.length} backup(s) no servidor` : '')
+
+    if (!projs.length && !backs.length) {
         const empty = document.createElement('div')
         empty.className = 'proj-empty'
-        empty.textContent = 'nenhum projeto ainda — crie o primeiro acima'
-        listEl.append(empty)
+        empty.textContent = q
+            ? `nenhum projeto encontrado para "${q}"`
+            : 'nenhum projeto ainda — crie o primeiro acima'
+        grid.append(empty)
         return
     }
 
-    for (const p of projects) {
-        const card = document.createElement('div')
-        card.className = 'proj-card'
-        const top = document.createElement('div')
-        top.className = 'pc-top'
-        const name = document.createElement('span')
-        name.className = 'pc-name'
-        name.textContent = p.name
-        const meta = document.createElement('span')
-        meta.className = 'pc-meta'
-        meta.textContent = `${p.animations.length} animações · ${p.refs.length} refs · ${new Date(p.updatedAt).toLocaleDateString('pt-BR')}`
-        const open = document.createElement('button')
-        open.className = 'btn btn-small'
-        open.textContent = 'ABRIR'
-        open.onclick = () => openProject(p)
-        const del = document.createElement('button')
-        del.className = 'btn btn-small danger'
-        del.textContent = 'X'
-        del.title = 'excluir projeto'
-        del.onclick = async () => {
-            if (!confirm(`Excluir o projeto "${p.name}"? Os vídeos salvos nele serão perdidos.`)) return
-            await deleteProject(p.id)
-            void goHome()
-        }
-        top.append(name, meta, open, del)
-        card.append(top)
+    for (const p of projs) {
+        const cover = p.animations.find((a) => a.thumb)?.thumb ?? p.refs[0]?.blob ?? null
+        const card = projectCard({
+            name: p.name,
+            meta: `${p.animations.length} anim · ${p.refs.length} refs · ${new Date(p.updatedAt).toLocaleDateString('pt-BR')}`,
+            cover,
+            onOpen: () => openProject(p),
+            deleteTitle: 'excluir projeto',
+            onDelete: async () => {
+                if (!confirm(`Excluir o projeto "${p.name}"? Os vídeos salvos nele serão perdidos.`)) return
+                await deleteProject(p.id)
+                void goHome()
+            },
+        })
+        grid.append(card)
+    }
 
-        // preview do conteúdo: thumbs das animações + referências (até 6)
-        const blobs: { blob: Blob; title: string }[] = []
-        for (const a of p.animations) {
-            if (a.thumb) blobs.push({ blob: a.thumb, title: a.name })
-        }
-        for (const r of p.refs) blobs.push({ blob: r.blob, title: r.name })
-        if (blobs.length) {
-            const strip = document.createElement('div')
-            strip.className = 'pc-thumbs'
-            for (const t of blobs.slice(0, 6)) {
-                const img = document.createElement('img')
-                img.src = URL.createObjectURL(t.blob)
-                img.onload = () => URL.revokeObjectURL(img.src)
-                img.title = t.title
-                strip.append(img)
-            }
-            if (blobs.length > 6) {
-                const more = document.createElement('span')
-                more.className = 'dim pc-more'
-                more.textContent = `+${blobs.length - 6}`
-                strip.append(more)
-            }
-            card.append(strip)
-        }
-        card.ondblclick = () => openProject(p)
-        listEl.append(card)
+    for (const b of backs) {
+        const card = projectCard({
+            name: b.name,
+            meta: `backup · ${new Date(b.updatedAt).toLocaleDateString('pt-BR')} · ${(b.size / 1048576).toFixed(1)} MB`,
+            cover: null,
+            backup: true,
+            onOpen: async () => {
+                busyShow('RESTAURANDO DO SERVIDOR...')
+                try {
+                    const p = await restoreBackup(b.id)
+                    toast('PROJETO RESTAURADO ✓')
+                    openProject(p)
+                } catch (err) {
+                    console.error(err)
+                    toast('FALHA AO RESTAURAR O BACKUP', true)
+                } finally {
+                    busyHide()
+                }
+            },
+            deleteTitle: 'excluir backup do servidor',
+            onDelete: async () => {
+                if (!confirm(`Excluir o backup "${b.name}" do servidor?`)) return
+                await deleteBackup(b.id)
+                void goHome()
+            },
+        })
+        grid.append(card)
     }
 }
+
+function projectCard(opts: {
+    name: string
+    meta: string
+    cover: Blob | null
+    backup?: boolean
+    deleteTitle: string
+    onOpen: () => void | Promise<void>
+    onDelete: () => Promise<void>
+}): HTMLElement {
+    const card = document.createElement('div')
+    card.className = 'pj-card' + (opts.backup ? ' backup' : '')
+    card.title = opts.backup ? `${opts.name} — restaurar do servidor` : opts.name
+
+    const coverEl = document.createElement('div')
+    coverEl.className = 'pj-cover'
+    if (opts.cover) {
+        const img = document.createElement('img')
+        img.loading = 'lazy' // 300+ projetos: só decodifica o que aparece
+        img.src = URL.createObjectURL(opts.cover)
+        img.onload = () => URL.revokeObjectURL(img.src)
+        coverEl.append(img)
+    } else {
+        const ph = document.createElement('span')
+        ph.className = 'pj-ph'
+        ph.textContent = opts.backup ? '⤓' : '∅'
+        coverEl.append(ph)
+    }
+    const del = document.createElement('button')
+    del.className = 'pj-del'
+    del.textContent = '×'
+    del.title = opts.deleteTitle
+    del.onclick = (e) => {
+        e.stopPropagation()
+        void opts.onDelete()
+    }
+    coverEl.append(del)
+
+    const body = document.createElement('div')
+    body.className = 'pj-body'
+    const name = document.createElement('div')
+    name.className = 'pj-name'
+    name.textContent = opts.name
+    const meta = document.createElement('div')
+    meta.className = 'pj-meta dim'
+    meta.textContent = opts.meta
+    body.append(name, meta)
+
+    card.append(coverEl, body)
+    card.onclick = () => void opts.onOpen()
+    return card
+}
+
+$<HTMLInputElement>('#home-search').oninput = renderHomeList
+$<HTMLSelectElement>('#home-sort').onchange = renderHomeList
 
 $<HTMLButtonElement>('#btn-create').onclick = async () => {
     const input = $<HTMLInputElement>('#new-proj-name')
