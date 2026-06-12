@@ -1,823 +1,1239 @@
 <!doctype html>
 <html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SPRITEFORGE — vídeo → spritesheet</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230a0d0b'/%3E%3Crect x='3' y='3' width='4' height='4' fill='%2352ff7a'/%3E%3Crect x='9' y='3' width='4' height='4' fill='%2352ff7a'/%3E%3Crect x='3' y='9' width='10' height='4' fill='%2352ff7a'/%3E%3C/svg%3E" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-</head>
-<body>
-  <header class="topbar">
-    <div class="logo" id="logo-home" title="início">SPRITE<span>FORGE</span></div>
-    <nav class="navtools" aria-label="ferramentas">
-      <button id="nav-genimage" class="nav-icon" data-tip="Gerador de Imagem">
-        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4">
-          <rect x="1.7" y="2.7" width="12.6" height="10.6" />
-          <circle cx="5.6" cy="6.2" r="1.1" fill="currentColor" stroke="none" />
-          <path d="M2.5 12l3.5-3.5 2.5 2.5 2.5-2.5 2.5 2.8" />
-        </svg>
-      </button>
-      <button id="nav-normalize" class="nav-icon" data-tip="Normalizador de Referências">
-        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4">
-          <circle cx="8" cy="7" r="4" />
-          <path d="M8 1v3M8 10v3M2 7h3M11 7h3M2.5 14.5h11" />
-        </svg>
-      </button>
-      <button id="nav-slicer" class="nav-icon" data-tip="Fatiador de Sprites">
-        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4">
-          <rect x="1.7" y="1.7" width="12.6" height="12.6" />
-          <path d="M6 1.7v12.6M10 1.7v12.6M1.7 6h12.6M1.7 10h12.6" />
-        </svg>
-      </button>
-      <button id="nav-genvideo" class="nav-icon" data-tip="Gerador de Vídeo (requer projeto aberto)">
-        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4">
-          <rect x="1.7" y="3.7" width="8.6" height="8.6" />
-          <path d="M10.3 7.2l4-2.7v7l-4-2.7z" />
-        </svg>
-      </button>
-      <button id="nav-atlas" class="nav-icon" data-tip="Atlas de Ícones">
-        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4">
-          <rect x="1.7" y="1.7" width="5.2" height="5.2" fill="currentColor" stroke="none" />
-          <rect x="9.1" y="1.7" width="5.2" height="5.2" />
-          <rect x="1.7" y="9.1" width="5.2" height="5.2" />
-          <rect x="9.1" y="9.1" width="5.2" height="5.2" fill="currentColor" stroke="none" />
-        </svg>
-      </button>
-    </nav>
-    <div class="topbar-right">
-      <span id="crumb" class="video-name"></span>
-      <button id="btn-back" class="btn btn-ghost hidden">← VOLTAR</button>
-    </div>
-  </header>
-
-  <!-- ════ TELA: PROJETOS ════ -->
-  <main id="screen-home" class="screen upload">
-    <section class="hero">
-      <div class="invader-wrap" aria-hidden="true">
-        <div class="invader frame-a"></div>
-        <div class="invader frame-b"></div>
-      </div>
-      <h1>VÍDEO <span class="arrow">&#9654;</span> SPRITESHEET</h1>
-      <p class="sub">projetos com várias animações &middot; chroma na GPU &middot; pivô e célula unificados &middot; atlas PNG&nbsp;+&nbsp;JSON</p>
-    </section>
-
-    <div class="panel new-proj">
-      <span class="field-label">NOVO PROJETO</span>
-      <div class="cfg-row">
-        <input id="new-proj-name" class="text-input" placeholder="nome do projeto (ex: heroi)" spellcheck="false" />
-        <button id="btn-create" class="btn btn-primary">CRIAR_</button>
-      </div>
-    </div>
-
-    <div id="project-list" class="proj-list"></div>
-  </main>
-
-  <!-- ════ TELA: GERADOR DE IMAGEM ════ -->
-  <main id="screen-genimage" class="screen editor hidden">
-    <div class="align-grid">
-
-      <section class="panel align-preview-panel">
-        <div class="panel-title">GERADOR DE IMAGEM <span id="gi-status" class="dim"></span>
-          <div class="title-actions">
-            <button id="gi-add" class="btn btn-small" title="anexa imagens de referência à geração (image-to-image)">+ REFERÊNCIA</button>
-          </div>
-        </div>
-        <input type="file" id="gi-files" accept="image/*" multiple hidden />
-        <div class="frames-hint dim">referências anexadas: <span id="gi-refs-count">0</span> &middot; o modelo usa as imagens como base (consistência de personagem)</div>
-        <div id="gi-refs" class="gv-refs"></div>
-        <div class="preview-wrap bg-dark gv-wrap">
-          <img id="gi-big" class="hidden" alt="imagem gerada" />
-        </div>
-        <div class="preview-controls">
-          <button id="gi-download" class="btn" disabled>BAIXAR PNG_</button>
-          <button id="gi-use" class="btn btn-primary hidden" disabled title="salva a imagem nas referências do projeto aberto">+ REFERÊNCIAS DO PROJETO_</button>
-        </div>
-        <div id="gi-gallery" class="gv-refs" style="margin-top: 10px"></div>
-      </section>
-
-      <aside class="side">
-        <section class="panel">
-          <div class="panel-title">OPENROUTER</div>
-          <label class="field">
-            <span class="field-label">API KEY (compartilhada com o gerador de vídeo)</span>
-            <input type="password" id="gi-key" class="text-input" placeholder="sk-or-v1-..." spellcheck="false" autocomplete="off" />
-          </label>
-          <label class="field" style="margin-top: 10px">
-            <span class="field-label">MODELO</span>
-            <select id="gi-model"></select>
-          </label>
-        </section>
-
-        <section class="panel">
-          <div class="panel-title">GERAÇÃO</div>
-          <label class="field">
-            <span class="field-label">PROMPT</span>
-            <textarea id="gi-prompt" class="text-input text-area" rows="5" spellcheck="false" placeholder="ex: personagem maga de corpo inteiro, vista lateral olhando para a direita, fundo verde #00b140 sólido, estilo ilustração de jogo"></textarea>
-          </label>
-          <div class="cfg-row tight" style="margin-top: 10px">
-            <label class="field">
-              <span class="field-label">ASPECTO</span>
-              <select id="gi-aspect">
-                <option value="1:1" selected>1:1</option>
-                <option value="2:3">2:3</option>
-                <option value="3:4">3:4</option>
-                <option value="9:16">9:16</option>
-                <option value="3:2">3:2</option>
-                <option value="4:3">4:3</option>
-                <option value="16:9">16:9</option>
-              </select>
-            </label>
-            <label class="field">
-              <span class="field-label">TAMANHO</span>
-              <select id="gi-size">
-                <option value="0.5K">0.5K</option>
-                <option value="1K" selected>1K</option>
-                <option value="2K">2K</option>
-              </select>
-            </label>
-          </div>
-          <button id="gi-generate" class="btn btn-primary btn-block" style="margin-top: 14px">GERAR IMAGEM_</button>
-          <div class="frames-hint dim" style="margin-top: 10px">dica: peça fundo #00b140 sólido no prompt — sai pronto para o normalizador e o gerador de vídeo</div>
-        </section>
-      </aside>
-
-    </div>
-  </main>
-
-  <!-- ════ TELA: NORMALIZADOR DE REFERÊNCIAS ════ -->
-  <main id="screen-normalize" class="screen editor hidden">
-    <div class="align-grid">
-
-      <section class="panel align-preview-panel">
-        <div class="panel-title">NORMALIZADOR <span id="norm-info" class="dim"></span></div>
-        <div id="norm-tabs" class="chip-row"></div>
-        <div id="norm-wrap" class="preview-wrap align-wrap">
-          <canvas id="norm-canvas"></canvas>
-        </div>
-        <div class="preview-controls">
-          <button id="norm-add" class="btn">+ IMAGENS</button>
-          <input type="file" id="norm-files" accept="image/*" multiple hidden />
-          <span class="dim cell-info">arraste imagens aqui &middot; linha magenta = chão &middot; arraste no preview para ajustar o Y</span>
-        </div>
-      </section>
-
-      <aside class="side">
-        <section class="panel">
-          <div class="panel-title">SAÍDA</div>
-          <div class="cfg-row tight">
-            <label class="field">
-              <span class="field-label">LARGURA</span>
-              <input type="number" id="nout-w" class="text-input" min="32" max="8192" />
-            </label>
-            <label class="field">
-              <span class="field-label">ALTURA</span>
-              <input type="number" id="nout-h" class="text-input" min="32" max="8192" />
-            </label>
-            <label class="field">
-              <span class="field-label">CHÃO (PX)</span>
-              <input type="number" id="nout-ground" class="text-input" min="0" max="512" />
-            </label>
-          </div>
-          <div class="cfg-row tight" style="margin-top: 10px; align-items: center">
-            <button id="btn-nauto" class="btn btn-small" title="ajusta a saída ao conteúdo das imagens">AUTO</button>
-            <label class="field" style="flex: 1">
-              <span class="field-label">COR DE FUNDO</span>
-              <input type="color" id="nout-bg" class="bg-color-input" value="#00b140" />
-            </label>
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-title">REMOÇÃO DE FUNDO</div>
-          <div class="frames-hint dim">fundo sólido (preto etc.): só remove o que toca as bordas — escuros internos do personagem ficam intactos</div>
-          <label class="field">
-            <span class="field-label">MODO</span>
-            <select id="n-mode">
-              <option value="auto" selected>auto (detecta por imagem)</option>
-              <option value="flood">fundo sólido (preto/branco)</option>
-              <option value="chroma">chroma (fundo colorido)</option>
-              <option value="none">usar alpha da imagem</option>
-            </select>
-          </label>
-          <label class="slider-field" style="margin-top: 12px">
-            <span class="sf-head">TOLERÂNCIA <span class="value" id="n-tol-val">14</span></span>
-            <input type="range" id="n-tol" min="0" max="300" value="14" />
-          </label>
-          <label class="slider-field">
-            <span class="sf-head">BORDA SUAVE <span class="value" id="n-feather-val">3</span></span>
-            <input type="range" id="n-feather" min="0" max="40" value="3" />
-          </label>
-          <label class="slider-field">
-            <span class="sf-head">SIMILARIDADE (CHROMA) <span class="value" id="n-sim-val">48</span></span>
-            <input type="range" id="n-sim" min="0" max="1000" value="48" />
-          </label>
-          <label class="slider-field">
-            <span class="sf-head">SUAVIZAÇÃO (CHROMA) <span class="value" id="n-smooth-val">470</span></span>
-            <input type="range" id="n-smooth" min="1" max="1000" value="470" />
-          </label>
-        </section>
-
-        <section class="panel">
-          <div class="panel-title">IMAGENS</div>
-          <div class="frames-hint dim">Y move em px (positivo = desce) &middot; ESC redimensiona</div>
-          <div id="norm-rows" class="align-rows"></div>
-          <button id="btn-equalize" class="btn btn-small btn-block" title="iguala a altura do conteúdo de todas pela primeira imagem">IGUALAR ALTURAS</button>
-        </section>
-
-        <section class="panel">
-          <div class="panel-title">EXPORTAR</div>
-          <button id="btn-norm-export" class="btn btn-primary btn-block">EXPORTAR IMAGENS_</button>
-        </section>
-      </aside>
-
-    </div>
-  </main>
-
-  <!-- ════ TELA: PROJETO (animações) ════ -->
-  <main id="screen-project" class="screen project hidden">
-    <div class="proj-head">
-      <input id="proj-title" class="proj-title" spellcheck="false" title="nome do projeto" />
-      <button id="btn-backup-proj" class="btn btn-ghost" title="envia o projeto completo para o servidor local de backup">BACKUP_</button>
-      <button id="btn-genvideo-proj" class="btn">GERAR VÍDEO_</button>
-      <button id="btn-align" class="btn">ALINHAR_</button>
-      <button id="btn-sprites-proj" class="btn btn-primary">SPRITES_</button>
-    </div>
-
-    <input type="file" id="anim-file" accept="video/*" hidden />
-
-    <div class="panel refs-panel">
-      <div class="panel-title">REFERÊNCIAS <span id="refs-count" class="dim"></span>
-        <div class="title-actions">
-          <button id="btn-add-ref" class="btn btn-small">+ IMAGENS</button>
-        </div>
-      </div>
-      <input type="file" id="ref-files" accept="image/*" multiple hidden />
-      <div id="refs-row" class="refs-row"></div>
-    </div>
-
-    <div id="import-panel" class="panel import-panel hidden">
-      <div class="file-card">
-        <span class="fc-name" id="fi-name"></span>
-        <span class="fc-meta" id="fi-meta"></span>
-      </div>
-      <div class="cfg-row">
-        <label class="field">
-          <span class="field-label">FPS DE EXTRAÇÃO</span>
-          <select id="extract-fps">
-            <option value="8">8 fps</option>
-            <option value="10">10 fps</option>
-            <option value="12">12 fps</option>
-            <option value="15">15 fps</option>
-            <option value="23" selected>23 fps</option>
-            <option value="24">24 fps</option>
-            <option value="30">30 fps</option>
-          </select>
-        </label>
-        <label class="field">
-          <span class="field-label">RESOLUÇÃO MÁX.</span>
-          <select id="extract-res">
-            <option value="0">original</option>
-            <option value="1024">1024 px</option>
-            <option value="720" selected>720 px</option>
-            <option value="512">512 px</option>
-            <option value="256">256 px</option>
-          </select>
-        </label>
-        <div class="field">
-          <span class="field-label" id="extract-estimate">&nbsp;</span>
-          <div class="cfg-row tight">
-            <button id="btn-extract" class="btn btn-primary">EXTRAIR_</button>
-            <button id="btn-import-cancel" class="btn">CANCELAR</button>
-          </div>
-        </div>
-      </div>
-      <div id="extract-progress" class="progress hidden">
-        <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
-        <div class="progress-label" id="progress-label">EXTRAINDO 000/000</div>
-      </div>
-    </div>
-
-    <div id="anim-grid" class="anim-grid"></div>
-  </main>
-
-  <!-- ════ TELA: EDITOR DE ANIMAÇÃO ════ -->
-  <main id="screen-editor" class="screen editor hidden">
-    <div class="editor-grid">
-
-      <section class="panel frames-panel">
-        <div class="panel-title">FRAMES <span id="sel-count" class="dim"></span>
-          <div class="title-actions">
-            <button id="btn-autoloop" class="btn btn-small btn-loop" title="detecta o melhor ponto de corte e ignora os frames que quebram o loop">LOOPING_</button>
-            <button id="btn-all" class="btn btn-small">TODOS</button>
-            <button id="btn-none" class="btn btn-small">NENHUM</button>
-            <button id="btn-invert" class="btn btn-small">INVERTER</button>
-          </div>
-        </div>
-        <div class="frames-hint dim">clique = incluir/excluir do loop &middot; shift+clique = intervalo &middot; os frames acesos formam a animação</div>
-        <div id="frames-grid" class="frames-grid"></div>
-      </section>
-
-      <aside class="side">
-        <section class="panel preview-panel">
-          <div class="panel-title">PREVIEW <span id="frame-indicator" class="dim"></span></div>
-          <div id="preview-wrap" class="preview-wrap checker">
-            <canvas id="preview-canvas"></canvas>
-          </div>
-          <div class="preview-controls">
-            <button id="btn-prev" class="btn btn-icon" title="frame anterior (&larr;)">&#9198;</button>
-            <button id="btn-play" class="btn btn-icon" title="play/pause (espaço)">&#9208;</button>
-            <button id="btn-next" class="btn btn-icon" title="próximo frame (&rarr;)">&#9197;</button>
-            <label class="inline-field">FPS
-              <input type="range" id="fps-range" min="1" max="60" value="23" />
-              <span id="fps-val" class="value">23</span>
-            </label>
-          </div>
-          <div class="preview-controls">
-            <label class="inline-field" title="funde o fim do loop com o início para suavizar a emenda (frames marcados em âmbar são consumidos pela fusão)">CROSSFADE
-              <input type="range" id="fade-range" min="0" max="12" value="0" />
-              <span id="fade-val" class="value">0</span>
-            </label>
-          </div>
-          <div class="preview-controls">
-            <div class="chip-group" title="zoom">
-              <button class="chip zoom-chip active" data-zoom="fit">FIT</button>
-              <button class="chip zoom-chip" data-zoom="1">1&times;</button>
-              <button class="chip zoom-chip" data-zoom="2">2&times;</button>
-              <button class="chip zoom-chip" data-zoom="4">4&times;</button>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>SPRITEFORGE — vídeo → spritesheet</title>
+        <link
+            rel="icon"
+            href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230a0d0b'/%3E%3Crect x='3' y='3' width='4' height='4' fill='%2352ff7a'/%3E%3Crect x='9' y='3' width='4' height='4' fill='%2352ff7a'/%3E%3Crect x='3' y='9' width='10' height='4' fill='%2352ff7a'/%3E%3C/svg%3E"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+            rel="stylesheet"
+        />
+    </head>
+    <body>
+        <header class="topbar">
+            <div class="logo" id="logo-home" title="início">SPRITE<span>FORGE</span></div>
+            <nav class="navtools" aria-label="ferramentas">
+                <button id="nav-genimage" class="nav-icon" data-tip="Gerador de Imagem">
+                    <svg
+                        viewBox="0 0 16 16"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                    >
+                        <rect x="1.7" y="2.7" width="12.6" height="10.6" />
+                        <circle cx="5.6" cy="6.2" r="1.1" fill="currentColor" stroke="none" />
+                        <path d="M2.5 12l3.5-3.5 2.5 2.5 2.5-2.5 2.5 2.8" />
+                    </svg>
+                </button>
+                <button id="nav-normalize" class="nav-icon" data-tip="Normalizador de Referências">
+                    <svg
+                        viewBox="0 0 16 16"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                    >
+                        <circle cx="8" cy="7" r="4" />
+                        <path d="M8 1v3M8 10v3M2 7h3M11 7h3M2.5 14.5h11" />
+                    </svg>
+                </button>
+                <button id="nav-slicer" class="nav-icon" data-tip="Fatiador de Sprites">
+                    <svg
+                        viewBox="0 0 16 16"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                    >
+                        <rect x="1.7" y="1.7" width="12.6" height="12.6" />
+                        <path d="M6 1.7v12.6M10 1.7v12.6M1.7 6h12.6M1.7 10h12.6" />
+                    </svg>
+                </button>
+                <button
+                    id="nav-genvideo"
+                    class="nav-icon"
+                    data-tip="Gerador de Vídeo (requer projeto aberto)"
+                >
+                    <svg
+                        viewBox="0 0 16 16"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                    >
+                        <rect x="1.7" y="3.7" width="8.6" height="8.6" />
+                        <path d="M10.3 7.2l4-2.7v7l-4-2.7z" />
+                    </svg>
+                </button>
+                <button id="nav-atlas" class="nav-icon" data-tip="Atlas de Ícones">
+                    <svg
+                        viewBox="0 0 16 16"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                    >
+                        <rect x="1.7" y="1.7" width="5.2" height="5.2" fill="currentColor" stroke="none" />
+                        <rect x="9.1" y="1.7" width="5.2" height="5.2" />
+                        <rect x="1.7" y="9.1" width="5.2" height="5.2" />
+                        <rect x="9.1" y="9.1" width="5.2" height="5.2" fill="currentColor" stroke="none" />
+                    </svg>
+                </button>
+            </nav>
+            <div class="topbar-right">
+                <span id="crumb" class="video-name"></span>
+                <button id="btn-back" class="btn btn-ghost hidden">← VOLTAR</button>
             </div>
-            <div class="chip-group push-right" title="fundo do preview">
-              <button class="chip bg-chip bg-checker active" data-bg="checker"></button>
-              <button class="chip bg-chip bg-dark" data-bg="dark"></button>
-              <button class="chip bg-chip bg-light" data-bg="light"></button>
+        </header>
+
+        <!-- ════ TELA: PROJETOS ════ -->
+        <main id="screen-home" class="screen upload">
+            <section class="hero">
+                <div class="invader-wrap" aria-hidden="true">
+                    <div class="invader frame-a"></div>
+                    <div class="invader frame-b"></div>
+                </div>
+                <h1>VÍDEO <span class="arrow">&#9654;</span> SPRITESHEET</h1>
+                <p class="sub">
+                    projetos com várias animações &middot; chroma na GPU &middot; pivô e célula unificados
+                    &middot; atlas PNG&nbsp;+&nbsp;JSON
+                </p>
+            </section>
+
+            <div class="panel new-proj">
+                <span class="field-label">NOVO PROJETO</span>
+                <div class="cfg-row">
+                    <input
+                        id="new-proj-name"
+                        class="text-input"
+                        placeholder="nome do projeto (ex: heroi)"
+                        spellcheck="false"
+                    />
+                    <button id="btn-create" class="btn btn-primary">CRIAR_</button>
+                </div>
             </div>
-          </div>
-        </section>
 
-        <section class="panel">
-          <div class="panel-title">ANIMAÇÃO</div>
-          <label class="field">
-            <span class="field-label">NOME</span>
-            <input type="text" id="anim-name" class="text-input" spellcheck="false" />
-          </label>
-        </section>
+            <div id="project-list" class="proj-list"></div>
+        </main>
 
-        <section class="panel">
-          <div class="panel-title">CHROMA KEY
-            <label class="switch" title="ligar/desligar chroma">
-              <input type="checkbox" id="chroma-enabled" checked /><span></span>
-            </label>
-          </div>
-          <div class="key-row">
-            <button id="key-swatch" class="key-swatch" title="cor do chroma (clique para editar)"></button>
-            <input type="color" id="key-color-input" hidden />
-            <button id="btn-eyedrop" class="btn btn-small" title="clique no preview para capturar a cor">CONTA-GOTAS</button>
-            <button id="btn-autokey" class="btn btn-small" title="detectar pelos cantos do frame">AUTO</button>
-          </div>
-          <label class="slider-field">
-            <span class="sf-head">SIMILARIDADE <span class="value" id="sim-val">54</span></span>
-            <input type="range" id="sim-range" min="0" max="1000" value="54" />
-          </label>
-          <label class="slider-field">
-            <span class="sf-head">SUAVIZAÇÃO <span class="value" id="smooth-val">202</span></span>
-            <input type="range" id="smooth-range" min="1" max="1000" value="202" />
-          </label>
-          <label class="slider-field">
-            <span class="sf-head">ANTI-REFLEXO <span class="value" id="spill-val">225</span></span>
-            <input type="range" id="spill-range" min="1" max="1000" value="225" />
-          </label>
-          <label class="slider-field">
-            <span class="sf-head">REMOVER HALO <span class="value" id="halo-val">312</span></span>
-            <input type="range" id="halo-range" min="0" max="1000" value="312" />
-          </label>
-        </section>
+        <!-- ════ TELA: GERADOR DE IMAGEM ════ -->
+        <main id="screen-genimage" class="screen editor hidden">
+            <div class="align-grid">
+                <section class="panel align-preview-panel">
+                    <div class="panel-title">
+                        GERADOR DE IMAGEM <span id="gi-status" class="dim"></span>
+                        <div class="title-actions">
+                            <button
+                                id="gi-add"
+                                class="btn btn-small"
+                                title="anexa imagens de referência à geração (image-to-image)"
+                            >
+                                + REFERÊNCIA
+                            </button>
+                        </div>
+                    </div>
+                    <input type="file" id="gi-files" accept="image/*" multiple hidden />
+                    <div class="frames-hint dim">
+                        referências anexadas: <span id="gi-refs-count">0</span> &middot; o modelo usa as
+                        imagens como base (consistência de personagem)
+                    </div>
+                    <div id="gi-refs" class="gv-refs"></div>
+                    <div class="preview-wrap bg-dark gv-wrap">
+                        <img id="gi-big" class="hidden" alt="imagem gerada" />
+                    </div>
+                    <div class="preview-controls">
+                        <button id="gi-download" class="btn" disabled>BAIXAR PNG_</button>
+                        <button
+                            id="gi-use"
+                            class="btn btn-primary hidden"
+                            disabled
+                            title="salva a imagem nas referências do projeto aberto"
+                        >
+                            + REFERÊNCIAS DO PROJETO_
+                        </button>
+                    </div>
+                    <div id="gi-gallery" class="gv-refs" style="margin-top: 10px"></div>
+                </section>
 
-        <section class="panel">
-          <div class="panel-title">CURVA DE FPS</div>
-          <div class="frames-hint dim">clique = novo ponto &middot; arraste = mover &middot; duplo clique/botão direito = remover &middot; cima = mais rápido</div>
-          <canvas id="curve-canvas" class="curve-canvas"></canvas>
-          <div class="chip-row curve-presets">
-            <button class="chip" id="curve-reset" title="velocidade constante">1&times;</button>
-            <button class="chip" data-curve="in" title="começa lento, termina rápido">ACELERA</button>
-            <button class="chip" data-curve="out" title="começa rápido, termina lento">DESACELERA</button>
-            <button class="chip" data-curve="mid" title="lento nas pontas, rápido no meio">PICO</button>
-          </div>
-        </section>
-      </aside>
+                <aside class="side">
+                    <section class="panel">
+                        <div class="panel-title">OPENROUTER</div>
+                        <label class="field">
+                            <span class="field-label">API KEY (compartilhada com o gerador de vídeo)</span>
+                            <input
+                                type="password"
+                                id="gi-key"
+                                class="text-input"
+                                placeholder="sk-or-v1-..."
+                                spellcheck="false"
+                                autocomplete="off"
+                            />
+                        </label>
+                        <label class="field" style="margin-top: 10px">
+                            <span class="field-label">MODELO</span>
+                            <select id="gi-model"></select>
+                        </label>
+                    </section>
 
-    </div>
-  </main>
-
-  <!-- ════ TELA: ALINHAMENTO & EXPORTAÇÃO ════ -->
-  <main id="screen-align" class="screen editor hidden">
-    <div class="align-grid">
-
-      <section class="panel align-preview-panel">
-        <div class="panel-title">ALINHAMENTO <span id="align-status" class="dim"></span></div>
-        <div id="align-tabs" class="chip-row"></div>
-        <div id="align-wrap" class="preview-wrap checker align-wrap">
-          <canvas id="align-canvas"></canvas>
-        </div>
-        <div class="preview-controls">
-          <button id="btn-aprev" class="btn btn-icon" title="frame anterior (&larr;)">&#9198;</button>
-          <button id="btn-aplay" class="btn btn-icon" title="play/pause (espaço)">&#9208;</button>
-          <button id="btn-anext" class="btn btn-icon" title="próximo frame (&rarr;)">&#9197;</button>
-          <select id="ghost-select" class="ghost-select" title="sobrepõe outra animação para comparar"></select>
-          <span id="cell-info" class="dim cell-info"></span>
-        </div>
-      </section>
-
-      <aside class="side">
-        <section class="panel">
-          <div class="panel-title">QUADRO &amp; PIVÔ</div>
-          <div class="chip-row">
-            <button class="chip pivot-chip" data-pivot="0.5,1">BASE (PÉ)</button>
-            <button class="chip pivot-chip" data-pivot="0.5,0.5">CENTRO</button>
-            <button class="chip pivot-chip" data-pivot="0.5,0">TOPO</button>
-          </div>
-          <div class="cfg-row tight">
-            <label class="field">
-              <span class="field-label">PIVÔ X (0–1)</span>
-              <input type="number" id="pivot-x" class="text-input" min="0" max="1" step="0.05" />
-            </label>
-            <label class="field">
-              <span class="field-label">PIVÔ Y (0–1)</span>
-              <input type="number" id="pivot-y" class="text-input" min="0" max="1" step="0.05" />
-            </label>
-            <label class="field">
-              <span class="field-label">MARGEM PX</span>
-              <input type="number" id="margin-input" class="text-input" min="0" max="128" />
-            </label>
-          </div>
-          <button id="btn-rebounds" class="btn btn-small btn-block" title="recalcula os limites do conteúdo (use após mudar chroma ou seleção)">RECALCULAR LIMITES</button>
-        </section>
-
-        <section class="panel">
-          <div class="panel-title">AJUSTE POR ANIMAÇÃO</div>
-          <div class="frames-hint dim">arraste a animação no preview para posicionar &middot; X/Y em px &middot; ESC redimensiona &middot; compare com o ghost</div>
-          <div id="align-rows" class="align-rows"></div>
-        </section>
-
-        <section class="panel">
-          <div class="frames-hint dim">a exportação acontece na área SPRITES, a etapa seguinte do fluxo</div>
-          <button id="btn-align-next" class="btn btn-primary btn-block">AVANÇAR &rarr; SPRITES_</button>
-        </section>
-      </aside>
-
-    </div>
-  </main>
-
-  <!-- ════ TELA: SPRITES (análise, geração e versões) ════ -->
-  <main id="screen-sprites" class="screen editor hidden">
-    <div class="align-grid">
-
-      <section class="panel align-preview-panel">
-        <div class="panel-title">SPRITES <span id="sp-status" class="dim"></span></div>
-        <div id="sp-tabs" class="chip-row"></div>
-        <div id="sp-wrap" class="preview-wrap checker align-wrap">
-          <canvas id="sp-canvas"></canvas>
-        </div>
-        <div class="preview-controls">
-          <button id="sp-prev" class="btn btn-icon" title="frame anterior (&larr;)">&#9198;</button>
-          <button id="sp-play" class="btn btn-icon" title="play/pause (espaço)">&#9208;</button>
-          <button id="sp-next" class="btn btn-icon" title="próximo frame (&rarr;)">&#9197;</button>
-          <span id="sp-info" class="dim cell-info"></span>
-        </div>
-      </section>
-
-      <aside class="side">
-        <section class="panel">
-          <div class="panel-title">ANÁLISE <span id="sp-an-count" class="dim"></span>
-            <div class="title-actions">
-              <button id="sp-reanalyze" class="btn btn-small" title="roda a análise de novo">REANALISAR</button>
+                    <section class="panel">
+                        <div class="panel-title">GERAÇÃO</div>
+                        <label class="field">
+                            <span class="field-label">PROMPT</span>
+                            <textarea
+                                id="gi-prompt"
+                                class="text-input text-area"
+                                rows="5"
+                                spellcheck="false"
+                                placeholder="ex: personagem maga de corpo inteiro, vista lateral olhando para a direita, fundo verde #00b140 sólido, estilo ilustração de jogo"
+                            ></textarea>
+                        </label>
+                        <div class="cfg-row tight" style="margin-top: 10px">
+                            <label class="field">
+                                <span class="field-label">ASPECTO</span>
+                                <select id="gi-aspect">
+                                    <option value="1:1" selected>1:1</option>
+                                    <option value="2:3">2:3</option>
+                                    <option value="3:4">3:4</option>
+                                    <option value="9:16">9:16</option>
+                                    <option value="3:2">3:2</option>
+                                    <option value="4:3">4:3</option>
+                                    <option value="16:9">16:9</option>
+                                </select>
+                            </label>
+                            <label class="field">
+                                <span class="field-label">TAMANHO</span>
+                                <select id="gi-size">
+                                    <option value="0.5K">0.5K</option>
+                                    <option value="1K" selected>1K</option>
+                                    <option value="2K">2K</option>
+                                </select>
+                            </label>
+                        </div>
+                        <button id="gi-generate" class="btn btn-primary btn-block" style="margin-top: 14px">
+                            GERAR IMAGEM_
+                        </button>
+                        <div class="frames-hint dim" style="margin-top: 10px">
+                            dica: peça fundo #00b140 sólido no prompt — sai pronto para o normalizador e o
+                            gerador de vídeo
+                        </div>
+                    </section>
+                </aside>
             </div>
-          </div>
-          <div class="frames-hint dim">propostas de correção — aceite, rejeite ou ajuste; nada altera as animações originais</div>
-          <div id="sp-corrections" class="align-rows sp-corrections"></div>
-        </section>
+        </main>
 
-        <section class="panel">
-          <div class="panel-title">EXPORTAÇÃO</div>
-          <div class="cfg-row tight">
-            <label class="field">
-              <span class="field-label">ESCALA</span>
-              <select id="sp-scale">
-                <option value="0.25">0.25&times;</option>
-                <option value="0.5">0.5&times;</option>
-                <option value="1" selected>1&times;</option>
-                <option value="2">2&times;</option>
-              </select>
-            </label>
-            <label class="field">
-              <span class="field-label">PADDING</span>
-              <input type="number" id="sp-padding" class="text-input" min="0" max="32" value="0" />
-            </label>
-            <label class="field">
-              <span class="field-label">COLUNAS</span>
-              <input type="number" id="sp-cols" class="text-input" min="0" max="64" value="0" title="0 = automático" />
-            </label>
-          </div>
-          <label class="field" style="margin-top: 10px">
-            <span class="field-label">COMPACTAÇÃO</span>
-            <select id="sp-colors" title="paleta menor = arquivo menor">
-              <option value="-1">nenhuma (rápido, 32-bit)</option>
-              <option value="0">sem perda (otimizado)</option>
-              <option value="256" selected>256 cores (recomendado)</option>
-              <option value="128">128 cores</option>
-              <option value="64">64 cores</option>
-            </select>
-          </label>
-          <div id="sp-summary" class="exp-summary dim"></div>
-          <button id="sp-generate" class="btn btn-primary btn-block">GERAR &amp; SALVAR_</button>
-        </section>
+        <!-- ════ TELA: NORMALIZADOR DE REFERÊNCIAS ════ -->
+        <main id="screen-normalize" class="screen editor hidden">
+            <div class="align-grid">
+                <section class="panel align-preview-panel">
+                    <div class="panel-title">NORMALIZADOR <span id="norm-info" class="dim"></span></div>
+                    <div id="norm-tabs" class="chip-row"></div>
+                    <div id="norm-wrap" class="preview-wrap align-wrap">
+                        <canvas id="norm-canvas"></canvas>
+                    </div>
+                    <div class="preview-controls">
+                        <button id="norm-add" class="btn">+ IMAGENS</button>
+                        <input type="file" id="norm-files" accept="image/*" multiple hidden />
+                        <span class="dim cell-info"
+                            >arraste imagens aqui &middot; linha magenta = chão &middot; arraste no preview
+                            para ajustar o Y</span
+                        >
+                    </div>
+                </section>
 
-        <section class="panel">
-          <div class="panel-title">VERSÕES <span id="sp-ver-count" class="dim"></span></div>
-          <div class="frames-hint dim">gerações salvas no projeto — baixe em ZIP, regere ou exclua</div>
-          <div id="sp-versions" class="align-rows"></div>
-        </section>
-      </aside>
+                <aside class="side">
+                    <section class="panel">
+                        <div class="panel-title">SAÍDA</div>
+                        <div class="cfg-row tight">
+                            <label class="field">
+                                <span class="field-label">LARGURA</span>
+                                <input type="number" id="nout-w" class="text-input" min="32" max="8192" />
+                            </label>
+                            <label class="field">
+                                <span class="field-label">ALTURA</span>
+                                <input type="number" id="nout-h" class="text-input" min="32" max="8192" />
+                            </label>
+                            <label class="field">
+                                <span class="field-label">CHÃO (PX)</span>
+                                <input type="number" id="nout-ground" class="text-input" min="0" max="512" />
+                            </label>
+                        </div>
+                        <div class="cfg-row tight" style="margin-top: 10px; align-items: center">
+                            <button
+                                id="btn-nauto"
+                                class="btn btn-small"
+                                title="ajusta a saída ao conteúdo das imagens"
+                            >
+                                AUTO
+                            </button>
+                            <label class="field" style="flex: 1">
+                                <span class="field-label">COR DE FUNDO</span>
+                                <input type="color" id="nout-bg" class="bg-color-input" value="#00b140" />
+                            </label>
+                        </div>
+                    </section>
 
-    </div>
-  </main>
+                    <section class="panel">
+                        <div class="panel-title">REMOÇÃO DE FUNDO</div>
+                        <div class="frames-hint dim">
+                            fundo sólido (preto etc.): só remove o que toca as bordas — escuros internos do
+                            personagem ficam intactos
+                        </div>
+                        <label class="field">
+                            <span class="field-label">MODO</span>
+                            <select id="n-mode">
+                                <option value="auto" selected>auto (detecta por imagem)</option>
+                                <option value="flood">fundo sólido (preto/branco)</option>
+                                <option value="chroma">chroma (fundo colorido)</option>
+                                <option value="none">usar alpha da imagem</option>
+                            </select>
+                        </label>
+                        <label class="slider-field" style="margin-top: 12px">
+                            <span class="sf-head"
+                                >TOLERÂNCIA <span class="value" id="n-tol-val">14</span></span
+                            >
+                            <input type="range" id="n-tol" min="0" max="300" value="14" />
+                        </label>
+                        <label class="slider-field">
+                            <span class="sf-head"
+                                >BORDA SUAVE <span class="value" id="n-feather-val">3</span></span
+                            >
+                            <input type="range" id="n-feather" min="0" max="40" value="3" />
+                        </label>
+                        <label class="slider-field">
+                            <span class="sf-head"
+                                >SIMILARIDADE (CHROMA) <span class="value" id="n-sim-val">48</span></span
+                            >
+                            <input type="range" id="n-sim" min="0" max="1000" value="48" />
+                        </label>
+                        <label class="slider-field">
+                            <span class="sf-head"
+                                >SUAVIZAÇÃO (CHROMA) <span class="value" id="n-smooth-val">470</span></span
+                            >
+                            <input type="range" id="n-smooth" min="1" max="1000" value="470" />
+                        </label>
+                    </section>
 
-  <!-- ════ TELA: FATIADOR DE ITENS ════ -->
-  <main id="screen-slicer" class="screen editor hidden">
-    <div class="align-grid">
+                    <section class="panel">
+                        <div class="panel-title">IMAGENS</div>
+                        <div class="frames-hint dim">
+                            Y move em px (positivo = desce) &middot; ESC redimensiona
+                        </div>
+                        <div id="norm-rows" class="align-rows"></div>
+                        <button
+                            id="btn-equalize"
+                            class="btn btn-small btn-block"
+                            title="iguala a altura do conteúdo de todas pela primeira imagem"
+                        >
+                            IGUALAR ALTURAS
+                        </button>
+                    </section>
 
-      <section class="panel align-preview-panel">
-        <div class="panel-title">FATIADOR DE ITENS <span id="sl-status" class="dim"></span><span id="sl-count" class="dim"></span>
-          <div class="title-actions">
-            <button id="sl-add" class="btn btn-small">+ IMAGEM</button>
-          </div>
-        </div>
-        <input type="file" id="sl-file" accept="image/*" hidden />
-        <div class="frames-hint dim">clique seleciona &middot; arraste move &middot; alça no canto redimensiona &middot; arraste no vazio cria caixa &middot; Delete exclui
-          <span class="chip-group push-right" title="fundo do preview">
-            <button class="chip bg-chip bg-checker active" data-slbg="checker"></button>
-            <button class="chip bg-chip sl-bg-black" data-slbg="black" title="fundo preto"></button>
-            <button class="chip bg-chip sl-bg-white" data-slbg="white" title="fundo branco"></button>
-          </span>
-        </div>
-        <div id="sl-wrap" class="preview-wrap checker align-wrap">
-          <canvas id="sl-canvas"></canvas>
-        </div>
-      </section>
-
-      <aside class="side">
-        <section class="panel">
-          <div class="panel-title">DETECÇÃO
-            <div class="title-actions">
-              <button id="sl-redetect" class="btn btn-small">REDETECTAR</button>
+                    <section class="panel">
+                        <div class="panel-title">EXPORTAR</div>
+                        <button id="btn-norm-export" class="btn btn-primary btn-block">
+                            EXPORTAR IMAGENS_
+                        </button>
+                    </section>
+                </aside>
             </div>
-          </div>
-          <div class="frames-hint dim">limiar alto separa itens com brilho encostado; a FOLGA devolve o brilho a cada caixa, parando na metade do vão até o vizinho</div>
-          <label class="slider-field">
-            <span class="sf-head">LIMIAR ALFA <span class="value" id="sl-threshold-val">48</span></span>
-            <input type="range" id="sl-threshold" min="1" max="255" value="48" />
-          </label>
-          <div class="cfg-row tight">
-            <label class="field">
-              <span class="field-label">ÁREA MÍNIMA</span>
-              <input type="number" id="sl-minarea" class="text-input" min="1" max="10000" value="64" />
-            </label>
-            <label class="field">
-              <span class="field-label">FUSÃO (PX)</span>
-              <input type="number" id="sl-merge" class="text-input" min="0" max="128" value="12" />
-            </label>
-            <label class="field">
-              <span class="field-label">FOLGA (PX)</span>
-              <input type="number" id="sl-pad" class="text-input" min="0" max="256" value="24" title="expande cada caixa para incluir o brilho, sem invadir o vizinho" />
-            </label>
-            <label class="field">
-              <span class="field-label">TOL. FUNDO</span>
-              <input type="number" id="sl-tol" class="text-input" min="0" max="300" value="14" title="tolerância da remoção de fundo sólido" />
-            </label>
-          </div>
-        </section>
+        </main>
 
-        <section class="panel">
-          <div class="panel-title">CAIXA <span id="sl-selinfo" class="dim"></span></div>
-          <div class="sl-item-row">
-            <div class="sl-item-preview" title="resultado final do item selecionado">
-              <canvas id="sl-item-canvas"></canvas>
+        <!-- ════ TELA: PROJETO (animações) ════ -->
+        <main id="screen-project" class="screen project hidden">
+            <div class="proj-head">
+                <input id="proj-title" class="proj-title" spellcheck="false" title="nome do projeto" />
+                <button
+                    id="btn-backup-proj"
+                    class="btn btn-ghost"
+                    title="envia o projeto completo para o servidor local de backup"
+                >
+                    BACKUP_
+                </button>
+                <button id="btn-genvideo-proj" class="btn">GERAR VÍDEO_</button>
+                <button id="btn-align" class="btn">ALINHAR_</button>
+                <button id="btn-sprites-proj" class="btn btn-primary">SPRITES_</button>
             </div>
-            <span id="sl-item-meta" class="dim" style="font-size: 11px"></span>
-          </div>
-          <div class="cfg-row tight">
-            <label class="field"><span class="field-label">X</span><input type="number" id="sl-x" class="text-input" /></label>
-            <label class="field"><span class="field-label">Y</span><input type="number" id="sl-y" class="text-input" /></label>
-            <label class="field"><span class="field-label">L</span><input type="number" id="sl-w" class="text-input" min="4" /></label>
-            <label class="field"><span class="field-label">A</span><input type="number" id="sl-h" class="text-input" min="4" /></label>
-          </div>
-          <button id="sl-delete" class="btn btn-small btn-block danger" style="margin-top: 10px" disabled>EXCLUIR CAIXA</button>
-        </section>
 
-        <section class="panel">
-          <div class="panel-title">EXPORTAR</div>
-          <label class="field">
-            <span class="field-label">NOME BASE</span>
-            <input type="text" id="sl-name" class="text-input" spellcheck="false" value="item" />
-          </label>
-          <div class="cfg-row tight" style="margin-top: 10px">
-            <label class="field">
-              <span class="field-label">TAMANHO</span>
-              <select id="sl-size">
-                <option value="32">32×32</option>
-                <option value="48">48×48</option>
-                <option value="64" selected>64×64</option>
-                <option value="96">96×96</option>
-                <option value="128">128×128</option>
-              </select>
-            </label>
-            <label class="field">
-              <span class="field-label">MARGEM %</span>
-              <input type="number" id="sl-margin" class="text-input" min="0" max="40" value="0" />
-            </label>
-          </div>
-          <label class="field" style="margin-top: 10px">
-            <span class="field-label">COMPACTAÇÃO</span>
-            <select id="sl-colors">
-              <option value="0">sem perda (otimizado)</option>
-              <option value="256" selected>256 cores (recomendado)</option>
-              <option value="128">128 cores</option>
-            </select>
-          </label>
-          <div id="sl-summary" class="exp-summary dim"></div>
-          <button id="sl-save" class="btn btn-block" title="grava os ícones na biblioteca para compor o atlas">SALVAR P/ ATLAS_</button>
-          <button id="sl-export" class="btn btn-primary btn-block" style="margin-top: 8px">EXPORTAR ZIP_</button>
-        </section>
-      </aside>
+            <input type="file" id="anim-file" accept="video/*" hidden />
 
-    </div>
-  </main>
-
-  <!-- ════ TELA: ATLAS DE ÍCONES ════ -->
-  <main id="screen-atlas" class="screen editor hidden">
-    <div class="align-grid">
-
-      <section class="panel align-preview-panel">
-        <div class="panel-title">ATLAS DE ÍCONES <span id="at-count" class="dim"></span></div>
-        <div class="frames-hint dim">preview do atlas montado — selecione os ícones na BIBLIOTECA ao lado
-          <span class="chip-group push-right" title="fundo do preview">
-            <button class="chip bg-chip bg-checker active" data-atbg="checker"></button>
-            <button class="chip bg-chip sl-bg-black" data-atbg="black" title="fundo preto"></button>
-            <button class="chip bg-chip sl-bg-white" data-atbg="white" title="fundo branco"></button>
-          </span>
-        </div>
-        <div id="at-wrap" class="preview-wrap checker align-wrap">
-          <canvas id="at-canvas"></canvas>
-        </div>
-      </section>
-
-      <aside class="side">
-        <section class="panel">
-          <div class="panel-title">BIBLIOTECA
-            <div class="title-actions">
-              <button id="at-all" class="btn btn-small">TODOS</button>
-              <button id="at-none" class="btn btn-small">NENHUM</button>
+            <div class="panel refs-panel">
+                <div class="panel-title">
+                    REFERÊNCIAS <span id="refs-count" class="dim"></span>
+                    <div class="title-actions">
+                        <button id="btn-add-ref" class="btn btn-small">+ IMAGENS</button>
+                    </div>
+                </div>
+                <input type="file" id="ref-files" accept="image/*" multiple hidden />
+                <div id="refs-row" class="refs-row"></div>
             </div>
-          </div>
-          <div class="frames-hint dim">clique inclui/exclui do atlas &middot; × remove da biblioteca &middot; alimente pelo FATIADOR</div>
-          <div id="at-grid" class="at-grid"></div>
-        </section>
 
-        <section class="panel">
-          <div class="panel-title">ATLAS</div>
-          <label class="field">
-            <span class="field-label">NOME</span>
-            <input type="text" id="at-name" class="text-input" spellcheck="false" value="icones" />
-          </label>
-          <div class="cfg-row tight" style="margin-top: 10px">
-            <label class="field">
-              <span class="field-label">COLUNAS</span>
-              <input type="number" id="at-cols" class="text-input" min="0" max="64" value="0" title="0 = automático" />
-            </label>
-            <label class="field">
-              <span class="field-label">PADDING</span>
-              <input type="number" id="at-padding" class="text-input" min="0" max="32" value="0" />
-            </label>
-          </div>
-          <label class="field" style="margin-top: 10px">
-            <span class="field-label">COMPACTAÇÃO</span>
-            <select id="at-colors">
-              <option value="0">sem perda (otimizado)</option>
-              <option value="256" selected>256 cores (recomendado)</option>
-              <option value="128">128 cores</option>
-            </select>
-          </label>
-          <div id="at-summary" class="exp-summary dim"></div>
-          <button id="at-export" class="btn btn-primary btn-block">EXPORTAR ATLAS_</button>
-        </section>
-      </aside>
-
-    </div>
-  </main>
-
-  <!-- ════ TELA: GERADOR DE VÍDEO ════ -->
-  <main id="screen-genvideo" class="screen editor hidden">
-    <div class="align-grid">
-
-      <section class="panel align-preview-panel">
-        <div class="panel-title">GERADOR DE VÍDEO <span id="gv-status" class="dim"></span>
-          <div class="title-actions">
-            <button id="gv-add" class="btn btn-small" title="adiciona imagens às referências do projeto">+ REFERÊNCIA</button>
-          </div>
-        </div>
-        <input type="file" id="gv-files" accept="image/*" multiple hidden />
-        <div class="frames-hint dim">clique nas referências do projeto para incluir/excluir da geração · <span id="gv-refs-count">0/7</span> selecionadas</div>
-        <div id="gv-refs" class="gv-refs"></div>
-        <div class="preview-wrap bg-dark gv-wrap">
-          <video id="gv-video" class="hidden" controls loop muted playsinline></video>
-          <div id="gv-loading" class="gv-loading hidden">
-            <div class="invader-wrap" aria-hidden="true">
-              <div class="invader frame-a"></div>
-              <div class="invader frame-b"></div>
+            <div id="import-panel" class="panel import-panel hidden">
+                <div class="file-card">
+                    <span class="fc-name" id="fi-name"></span>
+                    <span class="fc-meta" id="fi-meta"></span>
+                </div>
+                <div class="cfg-row">
+                    <label class="field">
+                        <span class="field-label">FPS DE EXTRAÇÃO</span>
+                        <select id="extract-fps">
+                            <option value="8">8 fps</option>
+                            <option value="10">10 fps</option>
+                            <option value="12">12 fps</option>
+                            <option value="15">15 fps</option>
+                            <option value="23" selected>23 fps</option>
+                            <option value="24">24 fps</option>
+                            <option value="30">30 fps</option>
+                        </select>
+                    </label>
+                    <label class="field">
+                        <span class="field-label">RESOLUÇÃO MÁX.</span>
+                        <select id="extract-res">
+                            <option value="0">original</option>
+                            <option value="1024">1024 px</option>
+                            <option value="720" selected>720 px</option>
+                            <option value="512">512 px</option>
+                            <option value="256">256 px</option>
+                        </select>
+                    </label>
+                    <div class="field">
+                        <span class="field-label" id="extract-estimate">&nbsp;</span>
+                        <div class="cfg-row tight">
+                            <button id="btn-extract" class="btn btn-primary">EXTRAIR_</button>
+                            <button id="btn-import-cancel" class="btn">CANCELAR</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="extract-progress" class="progress hidden">
+                    <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+                    <div class="progress-label" id="progress-label">EXTRAINDO 000/000</div>
+                </div>
             </div>
-            <div class="gv-loading-label">GERANDO VÍDEO</div>
-            <div class="progress-track"><div class="progress-bar" style="width: 100%"></div></div>
-            <div id="gv-loading-time" class="dim">0s</div>
-          </div>
-        </div>
-        <div class="preview-controls">
-          <button id="btn-gv-download" class="btn" disabled>BAIXAR MP4_</button>
-          <button id="btn-gv-use" class="btn btn-primary" disabled title="importa o vídeo como animação do projeto aberto">USAR NO PROJETO_</button>
-          <span id="gv-cost" class="dim cell-info"></span>
-        </div>
-      </section>
 
-      <aside class="side">
-        <section class="panel">
-          <div class="panel-title">OPENROUTER</div>
-          <label class="field">
-            <span class="field-label">API KEY</span>
-            <div class="cfg-row tight">
-              <input type="password" id="gv-key" class="text-input" placeholder="sk-or-v1-..." spellcheck="false" autocomplete="off" style="flex: 1" />
-              <button id="gv-test" class="btn btn-small" title="valida a chave no OpenRouter">TESTAR</button>
+            <div id="anim-grid" class="anim-grid"></div>
+        </main>
+
+        <!-- ════ TELA: EDITOR DE ANIMAÇÃO ════ -->
+        <main id="screen-editor" class="screen editor hidden">
+            <div class="editor-grid">
+                <section class="panel frames-panel">
+                    <div class="panel-title">
+                        FRAMES <span id="sel-count" class="dim"></span>
+                        <div class="title-actions">
+                            <button
+                                id="btn-autoloop"
+                                class="btn btn-small btn-loop"
+                                title="detecta o melhor ponto de corte e ignora os frames que quebram o loop"
+                            >
+                                LOOPING_
+                            </button>
+                            <button id="btn-all" class="btn btn-small">TODOS</button>
+                            <button id="btn-none" class="btn btn-small">NENHUM</button>
+                            <button id="btn-invert" class="btn btn-small">INVERTER</button>
+                        </div>
+                    </div>
+                    <div class="frames-hint dim">
+                        clique = incluir/excluir do loop &middot; shift+clique = intervalo &middot; os frames
+                        acesos formam a animação
+                    </div>
+                    <div id="frames-grid" class="frames-grid"></div>
+                </section>
+
+                <aside class="side">
+                    <section class="panel preview-panel">
+                        <div class="panel-title">PREVIEW <span id="frame-indicator" class="dim"></span></div>
+                        <div id="preview-wrap" class="preview-wrap checker">
+                            <canvas id="preview-canvas"></canvas>
+                        </div>
+                        <div class="preview-controls">
+                            <button id="btn-prev" class="btn btn-icon" title="frame anterior (&larr;)">
+                                &#9198;
+                            </button>
+                            <button id="btn-play" class="btn btn-icon" title="play/pause (espaço)">
+                                &#9208;
+                            </button>
+                            <button id="btn-next" class="btn btn-icon" title="próximo frame (&rarr;)">
+                                &#9197;
+                            </button>
+                            <label class="inline-field"
+                                >FPS
+                                <input type="range" id="fps-range" min="1" max="60" value="23" />
+                                <span id="fps-val" class="value">23</span>
+                            </label>
+                        </div>
+                        <div class="preview-controls">
+                            <label
+                                class="inline-field"
+                                title="funde o fim do loop com o início para suavizar a emenda (frames marcados em âmbar são consumidos pela fusão)"
+                                >CROSSFADE
+                                <input type="range" id="fade-range" min="0" max="12" value="0" />
+                                <span id="fade-val" class="value">0</span>
+                            </label>
+                        </div>
+                        <div class="preview-controls">
+                            <div class="chip-group" title="zoom">
+                                <button class="chip zoom-chip active" data-zoom="fit">FIT</button>
+                                <button class="chip zoom-chip" data-zoom="1">1&times;</button>
+                                <button class="chip zoom-chip" data-zoom="2">2&times;</button>
+                                <button class="chip zoom-chip" data-zoom="4">4&times;</button>
+                            </div>
+                            <div class="chip-group push-right" title="fundo do preview">
+                                <button class="chip bg-chip bg-checker active" data-bg="checker"></button>
+                                <button class="chip bg-chip bg-dark" data-bg="dark"></button>
+                                <button class="chip bg-chip bg-light" data-bg="light"></button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-title">ANIMAÇÃO</div>
+                        <label class="field">
+                            <span class="field-label">NOME</span>
+                            <input type="text" id="anim-name" class="text-input" spellcheck="false" />
+                        </label>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-title">
+                            CHROMA KEY
+                            <label class="switch" title="ligar/desligar chroma">
+                                <input type="checkbox" id="chroma-enabled" checked /><span></span>
+                            </label>
+                        </div>
+                        <div class="key-row">
+                            <button
+                                id="key-swatch"
+                                class="key-swatch"
+                                title="cor do chroma (clique para editar)"
+                            ></button>
+                            <input type="color" id="key-color-input" hidden />
+                            <button
+                                id="btn-eyedrop"
+                                class="btn btn-small"
+                                title="clique no preview para capturar a cor"
+                            >
+                                CONTA-GOTAS
+                            </button>
+                            <button
+                                id="btn-autokey"
+                                class="btn btn-small"
+                                title="detectar pelos cantos do frame"
+                            >
+                                AUTO
+                            </button>
+                        </div>
+                        <label class="slider-field">
+                            <span class="sf-head"
+                                >SIMILARIDADE <span class="value" id="sim-val">54</span></span
+                            >
+                            <input type="range" id="sim-range" min="0" max="1000" value="54" />
+                        </label>
+                        <label class="slider-field">
+                            <span class="sf-head"
+                                >SUAVIZAÇÃO <span class="value" id="smooth-val">202</span></span
+                            >
+                            <input type="range" id="smooth-range" min="1" max="1000" value="202" />
+                        </label>
+                        <label class="slider-field">
+                            <span class="sf-head"
+                                >ANTI-REFLEXO <span class="value" id="spill-val">225</span></span
+                            >
+                            <input type="range" id="spill-range" min="1" max="1000" value="225" />
+                        </label>
+                        <label class="slider-field">
+                            <span class="sf-head"
+                                >REMOVER HALO <span class="value" id="halo-val">312</span></span
+                            >
+                            <input type="range" id="halo-range" min="0" max="1000" value="312" />
+                        </label>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-title">CURVA DE FPS</div>
+                        <div class="frames-hint dim">
+                            clique = novo ponto &middot; arraste = mover &middot; duplo clique/botão direito =
+                            remover &middot; cima = mais rápido
+                        </div>
+                        <canvas id="curve-canvas" class="curve-canvas"></canvas>
+                        <div class="chip-row curve-presets">
+                            <button class="chip" id="curve-reset" title="velocidade constante">
+                                1&times;
+                            </button>
+                            <button class="chip" data-curve="in" title="começa lento, termina rápido">
+                                ACELERA
+                            </button>
+                            <button class="chip" data-curve="out" title="começa rápido, termina lento">
+                                DESACELERA
+                            </button>
+                            <button class="chip" data-curve="mid" title="lento nas pontas, rápido no meio">
+                                PICO
+                            </button>
+                        </div>
+                    </section>
+                </aside>
             </div>
-          </label>
-          <label class="field" style="margin-top: 10px">
-            <span class="field-label">MODELO</span>
-            <select id="gv-model">
-              <option value="x-ai/grok-imagine-video">xAI · Grok Imagine Video</option>
-              <option value="bytedance/seedance-2.0">ByteDance · Seedance 2.0</option>
-            </select>
-          </label>
-        </section>
+        </main>
 
-        <section class="panel">
-          <div class="panel-title">GERAÇÃO</div>
-          <label class="field">
-            <span class="field-label">PROMPT (A AÇÃO DA ANIMAÇÃO)</span>
-            <textarea id="gv-prompt" class="text-input text-area" rows="3" spellcheck="false" placeholder="ex: a maga corre no lugar, vista lateral, cabelo e capa balançando"></textarea>
-          </label>
-          <div class="cfg-row tight" style="margin-top: 10px">
-            <label class="field">
-              <span class="field-label">DURAÇÃO</span>
-              <select id="gv-duration"></select>
-            </label>
-            <label class="field">
-              <span class="field-label">TAMANHO (PX)</span>
-              <select id="gv-size"></select>
-            </label>
-          </div>
-          <label class="field" style="margin-top: 10px">
-            <span class="field-label">USO DAS IMAGENS</span>
-            <select id="gv-imgmode" title="como as imagens selecionadas são enviadas ao modelo">
-              <option value="first" selected>frame inicial — anima só a 1ª selecionada (recomendado)</option>
-              <option value="refs">referências de estilo (até 7, sem frame inicial)</option>
-            </select>
-          </label>
-          <label class="check-row" style="margin-top: 12px">
-            <input type="checkbox" id="gv-loop" checked />
-            <span>animação em looping (termina no frame inicial)</span>
-          </label>
-          <label class="field" style="margin-top: 12px">
-            <span class="field-label">DIRETRIZES (ANEXADAS AO PROMPT)
-              <button id="gv-dir-reset" class="btn btn-small" style="float: right" title="volta ao texto padrão">PADRÃO</button>
-            </span>
-            <textarea id="gv-directives" class="text-input text-area" rows="9" spellcheck="false"></textarea>
-          </label>
-        </section>
+        <!-- ════ TELA: ALINHAMENTO & EXPORTAÇÃO ════ -->
+        <main id="screen-align" class="screen editor hidden">
+            <div class="align-grid">
+                <section class="panel align-preview-panel">
+                    <div class="panel-title">ALINHAMENTO <span id="align-status" class="dim"></span></div>
+                    <div id="align-tabs" class="chip-row"></div>
+                    <div id="align-wrap" class="preview-wrap checker align-wrap">
+                        <canvas id="align-canvas"></canvas>
+                    </div>
+                    <div class="preview-controls">
+                        <button id="btn-aprev" class="btn btn-icon" title="frame anterior (&larr;)">
+                            &#9198;
+                        </button>
+                        <button id="btn-aplay" class="btn btn-icon" title="play/pause (espaço)">
+                            &#9208;
+                        </button>
+                        <button id="btn-anext" class="btn btn-icon" title="próximo frame (&rarr;)">
+                            &#9197;
+                        </button>
+                        <select
+                            id="ghost-select"
+                            class="ghost-select"
+                            title="sobrepõe outra animação para comparar"
+                        ></select>
+                        <span id="cell-info" class="dim cell-info"></span>
+                    </div>
+                </section>
 
-        <section class="panel">
-          <div class="panel-title">EXECUTAR</div>
-          <div id="gv-estimate" class="dim" style="font-size: 11px; margin-bottom: 10px"></div>
-          <button id="btn-generate" class="btn btn-primary btn-block">GERAR VÍDEO_</button>
-          <div class="frames-hint dim" style="margin-top: 10px">a geração leva de 30s a alguns minutos — não saia desta tela enquanto roda</div>
-        </section>
-      </aside>
+                <aside class="side">
+                    <section class="panel">
+                        <div class="panel-title">QUADRO &amp; PIVÔ</div>
+                        <div class="chip-row">
+                            <button class="chip pivot-chip" data-pivot="0.5,1">BASE (PÉ)</button>
+                            <button class="chip pivot-chip" data-pivot="0.5,0.5">CENTRO</button>
+                            <button class="chip pivot-chip" data-pivot="0.5,0">TOPO</button>
+                        </div>
+                        <div class="cfg-row tight">
+                            <label class="field">
+                                <span class="field-label">PIVÔ X (0–1)</span>
+                                <input
+                                    type="number"
+                                    id="pivot-x"
+                                    class="text-input"
+                                    min="0"
+                                    max="1"
+                                    step="0.05"
+                                />
+                            </label>
+                            <label class="field">
+                                <span class="field-label">PIVÔ Y (0–1)</span>
+                                <input
+                                    type="number"
+                                    id="pivot-y"
+                                    class="text-input"
+                                    min="0"
+                                    max="1"
+                                    step="0.05"
+                                />
+                            </label>
+                            <label class="field">
+                                <span class="field-label">MARGEM PX</span>
+                                <input type="number" id="margin-input" class="text-input" min="0" max="128" />
+                            </label>
+                        </div>
+                        <button
+                            id="btn-rebounds"
+                            class="btn btn-small btn-block"
+                            title="recalcula os limites do conteúdo (use após mudar chroma ou seleção)"
+                        >
+                            RECALCULAR LIMITES
+                        </button>
+                    </section>
 
-    </div>
-  </main>
+                    <section class="panel">
+                        <div class="panel-title">AJUSTE POR ANIMAÇÃO</div>
+                        <div class="frames-hint dim">
+                            arraste a animação no preview para posicionar &middot; X/Y em px &middot; ESC
+                            redimensiona &middot; compare com o ghost
+                        </div>
+                        <div id="align-rows" class="align-rows"></div>
+                    </section>
 
-  <div id="busy" class="busy hidden">
-    <div class="busy-box" id="busy-label">CARREGANDO...</div>
-  </div>
+                    <section class="panel">
+                        <div class="frames-hint dim">
+                            a exportação acontece na área SPRITES, a etapa seguinte do fluxo
+                        </div>
+                        <button id="btn-align-next" class="btn btn-primary btn-block">
+                            AVANÇAR &rarr; SPRITES_
+                        </button>
+                    </section>
+                </aside>
+            </div>
+        </main>
 
-  <div id="toast" class="toast hidden"></div>
-  <script type="module" src="/src/main.ts"></script>
-</body>
+        <!-- ════ TELA: SPRITES (análise, geração e versões) ════ -->
+        <main id="screen-sprites" class="screen editor hidden">
+            <div class="align-grid">
+                <section class="panel align-preview-panel">
+                    <div class="panel-title">SPRITES <span id="sp-status" class="dim"></span></div>
+                    <div id="sp-tabs" class="chip-row"></div>
+                    <div id="sp-wrap" class="preview-wrap checker align-wrap">
+                        <canvas id="sp-canvas"></canvas>
+                    </div>
+                    <div class="preview-controls">
+                        <button id="sp-prev" class="btn btn-icon" title="frame anterior (&larr;)">
+                            &#9198;
+                        </button>
+                        <button id="sp-play" class="btn btn-icon" title="play/pause (espaço)">&#9208;</button>
+                        <button id="sp-next" class="btn btn-icon" title="próximo frame (&rarr;)">
+                            &#9197;
+                        </button>
+                        <span id="sp-info" class="dim cell-info"></span>
+                    </div>
+                </section>
+
+                <aside class="side">
+                    <section class="panel">
+                        <div class="panel-title">
+                            ANÁLISE <span id="sp-an-count" class="dim"></span>
+                            <div class="title-actions">
+                                <button
+                                    id="sp-reanalyze"
+                                    class="btn btn-small"
+                                    title="roda a análise de novo"
+                                >
+                                    REANALISAR
+                                </button>
+                            </div>
+                        </div>
+                        <div class="frames-hint dim">
+                            propostas de correção — aceite, rejeite ou ajuste; nada altera as animações
+                            originais
+                        </div>
+                        <div id="sp-corrections" class="align-rows sp-corrections"></div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-title">EXPORTAÇÃO</div>
+                        <div class="cfg-row tight">
+                            <label class="field">
+                                <span class="field-label">ESCALA</span>
+                                <select id="sp-scale">
+                                    <option value="0.25">0.25&times;</option>
+                                    <option value="0.5">0.5&times;</option>
+                                    <option value="1" selected>1&times;</option>
+                                    <option value="2">2&times;</option>
+                                </select>
+                            </label>
+                            <label class="field">
+                                <span class="field-label">PADDING</span>
+                                <input
+                                    type="number"
+                                    id="sp-padding"
+                                    class="text-input"
+                                    min="0"
+                                    max="32"
+                                    value="0"
+                                />
+                            </label>
+                            <label class="field">
+                                <span class="field-label">COLUNAS</span>
+                                <input
+                                    type="number"
+                                    id="sp-cols"
+                                    class="text-input"
+                                    min="0"
+                                    max="64"
+                                    value="0"
+                                    title="0 = automático"
+                                />
+                            </label>
+                        </div>
+                        <label class="field" style="margin-top: 10px">
+                            <span class="field-label">COMPACTAÇÃO</span>
+                            <select id="sp-colors" title="paleta menor = arquivo menor">
+                                <option value="-1">nenhuma (rápido, 32-bit)</option>
+                                <option value="0">sem perda (otimizado)</option>
+                                <option value="256" selected>256 cores (recomendado)</option>
+                                <option value="128">128 cores</option>
+                                <option value="64">64 cores</option>
+                            </select>
+                        </label>
+                        <div id="sp-summary" class="exp-summary dim"></div>
+                        <button id="sp-generate" class="btn btn-primary btn-block">
+                            GERAR &amp; SALVAR_
+                        </button>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-title">VERSÕES <span id="sp-ver-count" class="dim"></span></div>
+                        <div class="frames-hint dim">
+                            gerações salvas no projeto — baixe em ZIP, regere ou exclua
+                        </div>
+                        <div id="sp-versions" class="align-rows"></div>
+                    </section>
+                </aside>
+            </div>
+        </main>
+
+        <!-- ════ TELA: FATIADOR DE ITENS ════ -->
+        <main id="screen-slicer" class="screen editor hidden">
+            <div class="align-grid">
+                <section class="panel align-preview-panel">
+                    <div class="panel-title">
+                        FATIADOR DE ITENS <span id="sl-status" class="dim"></span
+                        ><span id="sl-count" class="dim"></span>
+                        <div class="title-actions">
+                            <button id="sl-add" class="btn btn-small">+ IMAGEM</button>
+                        </div>
+                    </div>
+                    <input type="file" id="sl-file" accept="image/*" hidden />
+                    <div class="frames-hint dim">
+                        clique seleciona &middot; arraste move &middot; alça no canto redimensiona &middot;
+                        arraste no vazio cria caixa &middot; Delete exclui
+                        <span class="chip-group push-right" title="fundo do preview">
+                            <button class="chip bg-chip bg-checker active" data-slbg="checker"></button>
+                            <button
+                                class="chip bg-chip sl-bg-black"
+                                data-slbg="black"
+                                title="fundo preto"
+                            ></button>
+                            <button
+                                class="chip bg-chip sl-bg-white"
+                                data-slbg="white"
+                                title="fundo branco"
+                            ></button>
+                        </span>
+                    </div>
+                    <div id="sl-wrap" class="preview-wrap checker align-wrap">
+                        <canvas id="sl-canvas"></canvas>
+                    </div>
+                </section>
+
+                <aside class="side">
+                    <section class="panel">
+                        <div class="panel-title">
+                            DETECÇÃO
+                            <div class="title-actions">
+                                <button id="sl-redetect" class="btn btn-small">REDETECTAR</button>
+                            </div>
+                        </div>
+                        <div class="frames-hint dim">
+                            limiar alto separa itens com brilho encostado; a FOLGA devolve o brilho a cada
+                            caixa, parando na metade do vão até o vizinho
+                        </div>
+                        <label class="slider-field">
+                            <span class="sf-head"
+                                >LIMIAR ALFA <span class="value" id="sl-threshold-val">48</span></span
+                            >
+                            <input type="range" id="sl-threshold" min="1" max="255" value="48" />
+                        </label>
+                        <div class="cfg-row tight">
+                            <label class="field">
+                                <span class="field-label">ÁREA MÍNIMA</span>
+                                <input
+                                    type="number"
+                                    id="sl-minarea"
+                                    class="text-input"
+                                    min="1"
+                                    max="10000"
+                                    value="64"
+                                />
+                            </label>
+                            <label class="field">
+                                <span class="field-label">FUSÃO (PX)</span>
+                                <input
+                                    type="number"
+                                    id="sl-merge"
+                                    class="text-input"
+                                    min="0"
+                                    max="128"
+                                    value="12"
+                                />
+                            </label>
+                            <label class="field">
+                                <span class="field-label">FOLGA (PX)</span>
+                                <input
+                                    type="number"
+                                    id="sl-pad"
+                                    class="text-input"
+                                    min="0"
+                                    max="256"
+                                    value="24"
+                                    title="expande cada caixa para incluir o brilho, sem invadir o vizinho"
+                                />
+                            </label>
+                            <label class="field">
+                                <span class="field-label">TOL. FUNDO</span>
+                                <input
+                                    type="number"
+                                    id="sl-tol"
+                                    class="text-input"
+                                    min="0"
+                                    max="300"
+                                    value="14"
+                                    title="tolerância da remoção de fundo sólido"
+                                />
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-title">CAIXA <span id="sl-selinfo" class="dim"></span></div>
+                        <div class="sl-item-row">
+                            <div class="sl-item-preview" title="resultado final do item selecionado">
+                                <canvas id="sl-item-canvas"></canvas>
+                            </div>
+                            <span id="sl-item-meta" class="dim" style="font-size: 11px"></span>
+                        </div>
+                        <div class="cfg-row tight">
+                            <label class="field"
+                                ><span class="field-label">X</span
+                                ><input type="number" id="sl-x" class="text-input"
+                            /></label>
+                            <label class="field"
+                                ><span class="field-label">Y</span
+                                ><input type="number" id="sl-y" class="text-input"
+                            /></label>
+                            <label class="field"
+                                ><span class="field-label">L</span
+                                ><input type="number" id="sl-w" class="text-input" min="4"
+                            /></label>
+                            <label class="field"
+                                ><span class="field-label">A</span
+                                ><input type="number" id="sl-h" class="text-input" min="4"
+                            /></label>
+                        </div>
+                        <button
+                            id="sl-delete"
+                            class="btn btn-small btn-block danger"
+                            style="margin-top: 10px"
+                            disabled
+                        >
+                            EXCLUIR CAIXA
+                        </button>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-title">EXPORTAR</div>
+                        <label class="field">
+                            <span class="field-label">NOME BASE</span>
+                            <input
+                                type="text"
+                                id="sl-name"
+                                class="text-input"
+                                spellcheck="false"
+                                value="item"
+                            />
+                        </label>
+                        <div class="cfg-row tight" style="margin-top: 10px">
+                            <label class="field">
+                                <span class="field-label">TAMANHO</span>
+                                <select id="sl-size">
+                                    <option value="32">32×32</option>
+                                    <option value="48">48×48</option>
+                                    <option value="64" selected>64×64</option>
+                                    <option value="96">96×96</option>
+                                    <option value="128">128×128</option>
+                                </select>
+                            </label>
+                            <label class="field">
+                                <span class="field-label">MARGEM %</span>
+                                <input
+                                    type="number"
+                                    id="sl-margin"
+                                    class="text-input"
+                                    min="0"
+                                    max="40"
+                                    value="0"
+                                />
+                            </label>
+                        </div>
+                        <label class="field" style="margin-top: 10px">
+                            <span class="field-label">COMPACTAÇÃO</span>
+                            <select id="sl-colors">
+                                <option value="0">sem perda (otimizado)</option>
+                                <option value="256" selected>256 cores (recomendado)</option>
+                                <option value="128">128 cores</option>
+                            </select>
+                        </label>
+                        <div id="sl-summary" class="exp-summary dim"></div>
+                        <button
+                            id="sl-save"
+                            class="btn btn-block"
+                            title="grava os ícones na biblioteca para compor o atlas"
+                        >
+                            SALVAR P/ ATLAS_
+                        </button>
+                        <button id="sl-export" class="btn btn-primary btn-block" style="margin-top: 8px">
+                            EXPORTAR ZIP_
+                        </button>
+                    </section>
+                </aside>
+            </div>
+        </main>
+
+        <!-- ════ TELA: ATLAS DE ÍCONES ════ -->
+        <main id="screen-atlas" class="screen editor hidden">
+            <div class="align-grid">
+                <section class="panel align-preview-panel">
+                    <div class="panel-title">ATLAS DE ÍCONES <span id="at-count" class="dim"></span></div>
+                    <div class="frames-hint dim">
+                        preview do atlas montado — selecione os ícones na BIBLIOTECA ao lado
+                        <span class="chip-group push-right" title="fundo do preview">
+                            <button class="chip bg-chip bg-checker active" data-atbg="checker"></button>
+                            <button
+                                class="chip bg-chip sl-bg-black"
+                                data-atbg="black"
+                                title="fundo preto"
+                            ></button>
+                            <button
+                                class="chip bg-chip sl-bg-white"
+                                data-atbg="white"
+                                title="fundo branco"
+                            ></button>
+                        </span>
+                    </div>
+                    <div id="at-wrap" class="preview-wrap checker align-wrap">
+                        <canvas id="at-canvas"></canvas>
+                    </div>
+                </section>
+
+                <aside class="side">
+                    <section class="panel">
+                        <div class="panel-title">
+                            BIBLIOTECA
+                            <div class="title-actions">
+                                <button id="at-all" class="btn btn-small">TODOS</button>
+                                <button id="at-none" class="btn btn-small">NENHUM</button>
+                            </div>
+                        </div>
+                        <div class="frames-hint dim">
+                            clique inclui/exclui do atlas &middot; × remove da biblioteca &middot; alimente
+                            pelo FATIADOR
+                        </div>
+                        <div id="at-grid" class="at-grid"></div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-title">ATLAS</div>
+                        <label class="field">
+                            <span class="field-label">NOME</span>
+                            <input
+                                type="text"
+                                id="at-name"
+                                class="text-input"
+                                spellcheck="false"
+                                value="icones"
+                            />
+                        </label>
+                        <div class="cfg-row tight" style="margin-top: 10px">
+                            <label class="field">
+                                <span class="field-label">COLUNAS</span>
+                                <input
+                                    type="number"
+                                    id="at-cols"
+                                    class="text-input"
+                                    min="0"
+                                    max="64"
+                                    value="0"
+                                    title="0 = automático"
+                                />
+                            </label>
+                            <label class="field">
+                                <span class="field-label">PADDING</span>
+                                <input
+                                    type="number"
+                                    id="at-padding"
+                                    class="text-input"
+                                    min="0"
+                                    max="32"
+                                    value="0"
+                                />
+                            </label>
+                        </div>
+                        <label class="field" style="margin-top: 10px">
+                            <span class="field-label">COMPACTAÇÃO</span>
+                            <select id="at-colors">
+                                <option value="0">sem perda (otimizado)</option>
+                                <option value="256" selected>256 cores (recomendado)</option>
+                                <option value="128">128 cores</option>
+                            </select>
+                        </label>
+                        <div id="at-summary" class="exp-summary dim"></div>
+                        <button id="at-export" class="btn btn-primary btn-block">EXPORTAR ATLAS_</button>
+                    </section>
+                </aside>
+            </div>
+        </main>
+
+        <!-- ════ TELA: GERADOR DE VÍDEO ════ -->
+        <main id="screen-genvideo" class="screen editor hidden">
+            <div class="align-grid">
+                <section class="panel align-preview-panel">
+                    <div class="panel-title">
+                        GERADOR DE VÍDEO <span id="gv-status" class="dim"></span>
+                        <div class="title-actions">
+                            <button
+                                id="gv-add"
+                                class="btn btn-small"
+                                title="adiciona imagens às referências do projeto"
+                            >
+                                + REFERÊNCIA
+                            </button>
+                        </div>
+                    </div>
+                    <input type="file" id="gv-files" accept="image/*" multiple hidden />
+                    <div class="frames-hint dim">
+                        clique nas referências do projeto para incluir/excluir da geração ·
+                        <span id="gv-refs-count">0/7</span> selecionadas
+                    </div>
+                    <div id="gv-refs" class="gv-refs"></div>
+                    <div class="preview-wrap bg-dark gv-wrap">
+                        <video id="gv-video" class="hidden" controls loop muted playsinline></video>
+                        <div id="gv-loading" class="gv-loading hidden">
+                            <div class="invader-wrap" aria-hidden="true">
+                                <div class="invader frame-a"></div>
+                                <div class="invader frame-b"></div>
+                            </div>
+                            <div class="gv-loading-label">GERANDO VÍDEO</div>
+                            <div class="progress-track">
+                                <div class="progress-bar" style="width: 100%"></div>
+                            </div>
+                            <div id="gv-loading-time" class="dim">0s</div>
+                        </div>
+                    </div>
+                    <div class="preview-controls">
+                        <button id="btn-gv-download" class="btn" disabled>BAIXAR MP4_</button>
+                        <button
+                            id="btn-gv-use"
+                            class="btn btn-primary"
+                            disabled
+                            title="importa o vídeo como animação do projeto aberto"
+                        >
+                            USAR NO PROJETO_
+                        </button>
+                        <span id="gv-cost" class="dim cell-info"></span>
+                    </div>
+                </section>
+
+                <aside class="side">
+                    <section class="panel">
+                        <div class="panel-title">OPENROUTER</div>
+                        <label class="field">
+                            <span class="field-label">API KEY</span>
+                            <div class="cfg-row tight">
+                                <input
+                                    type="password"
+                                    id="gv-key"
+                                    class="text-input"
+                                    placeholder="sk-or-v1-..."
+                                    spellcheck="false"
+                                    autocomplete="off"
+                                    style="flex: 1"
+                                />
+                                <button
+                                    id="gv-test"
+                                    class="btn btn-small"
+                                    title="valida a chave no OpenRouter"
+                                >
+                                    TESTAR
+                                </button>
+                            </div>
+                        </label>
+                        <label class="field" style="margin-top: 10px">
+                            <span class="field-label">MODELO</span>
+                            <select id="gv-model">
+                                <option value="x-ai/grok-imagine-video">xAI · Grok Imagine Video</option>
+                                <option value="bytedance/seedance-2.0">ByteDance · Seedance 2.0</option>
+                            </select>
+                        </label>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-title">GERAÇÃO</div>
+                        <label class="field">
+                            <span class="field-label">PROMPT (A AÇÃO DA ANIMAÇÃO)</span>
+                            <textarea
+                                id="gv-prompt"
+                                class="text-input text-area"
+                                rows="3"
+                                spellcheck="false"
+                                placeholder="ex: a maga corre no lugar, vista lateral, cabelo e capa balançando"
+                            ></textarea>
+                        </label>
+                        <div class="cfg-row tight" style="margin-top: 10px">
+                            <label class="field">
+                                <span class="field-label">DURAÇÃO</span>
+                                <select id="gv-duration"></select>
+                            </label>
+                            <label class="field">
+                                <span class="field-label">TAMANHO (PX)</span>
+                                <select id="gv-size"></select>
+                            </label>
+                        </div>
+                        <label class="field" style="margin-top: 10px">
+                            <span class="field-label">USO DAS IMAGENS</span>
+                            <select
+                                id="gv-imgmode"
+                                title="como as imagens selecionadas são enviadas ao modelo"
+                            >
+                                <option value="first" selected>
+                                    frame inicial — anima só a 1ª selecionada (recomendado)
+                                </option>
+                                <option value="refs">referências de estilo (até 7, sem frame inicial)</option>
+                            </select>
+                        </label>
+                        <label class="check-row" style="margin-top: 12px">
+                            <input type="checkbox" id="gv-loop" checked />
+                            <span>animação em looping (termina no frame inicial)</span>
+                        </label>
+                        <label class="field" style="margin-top: 12px">
+                            <span class="field-label"
+                                >DIRETRIZES (ANEXADAS AO PROMPT)
+                                <button
+                                    id="gv-dir-reset"
+                                    class="btn btn-small"
+                                    style="float: right"
+                                    title="volta ao texto padrão"
+                                >
+                                    PADRÃO
+                                </button>
+                            </span>
+                            <textarea
+                                id="gv-directives"
+                                class="text-input text-area"
+                                rows="9"
+                                spellcheck="false"
+                            ></textarea>
+                        </label>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-title">EXECUTAR</div>
+                        <div id="gv-estimate" class="dim" style="font-size: 11px; margin-bottom: 10px"></div>
+                        <button id="btn-generate" class="btn btn-primary btn-block">GERAR VÍDEO_</button>
+                        <div class="frames-hint dim" style="margin-top: 10px">
+                            a geração leva de 30s a alguns minutos — não saia desta tela enquanto roda
+                        </div>
+                    </section>
+                </aside>
+            </div>
+        </main>
+
+        <div id="busy" class="busy hidden">
+            <div class="busy-box" id="busy-label">CARREGANDO...</div>
+        </div>
+
+        <div id="toast" class="toast hidden"></div>
+        <script type="module" src="/src/main.ts"></script>
+    </body>
 </html>

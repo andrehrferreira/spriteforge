@@ -19,240 +19,260 @@ import { ensureFrames, openProjectState, saveProject, state } from './state'
 import { toast } from './toast'
 import { newProject, type AnimationData, type ProjectData } from './types'
 
-const $ = <T extends HTMLElement = HTMLElement>(sel: string): T =>
-  document.querySelector(sel) as T
+const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => document.querySelector(sel) as T
 
-type Screen = 'home' | 'project' | 'editor' | 'align' | 'sprites' | 'normalize' | 'genvideo' | 'slicer' | 'genimage' | 'atlas'
+type Screen =
+    | 'home'
+    | 'project'
+    | 'editor'
+    | 'align'
+    | 'sprites'
+    | 'normalize'
+    | 'genvideo'
+    | 'slicer'
+    | 'genimage'
+    | 'atlas'
 let cleanup: (() => void) | null = null
 
 const NAV_BY_SCREEN: Partial<Record<Screen, string>> = {
-  genimage: 'nav-genimage',
-  normalize: 'nav-normalize',
-  slicer: 'nav-slicer',
-  genvideo: 'nav-genvideo',
-  atlas: 'nav-atlas',
+    genimage: 'nav-genimage',
+    normalize: 'nav-normalize',
+    slicer: 'nav-slicer',
+    genvideo: 'nav-genvideo',
+    atlas: 'nav-atlas',
 }
 
 function show(screen: Screen): void {
-  cleanup?.()
-  cleanup = null
-  for (const s of ['home', 'project', 'editor', 'align', 'sprites', 'normalize', 'genvideo', 'slicer', 'genimage', 'atlas'] as const) {
-    $(`#screen-${s}`).classList.toggle('hidden', s !== screen)
-  }
-  document.body.classList.toggle('in-editor', screen !== 'home' && screen !== 'project')
-  // estado ativo da navbar global
-  for (const id of Object.values(NAV_BY_SCREEN)) {
-    $(`#${id}`).classList.toggle('active', NAV_BY_SCREEN[screen] === id)
-  }
+    cleanup?.()
+    cleanup = null
+    for (const s of [
+        'home',
+        'project',
+        'editor',
+        'align',
+        'sprites',
+        'normalize',
+        'genvideo',
+        'slicer',
+        'genimage',
+        'atlas',
+    ] as const) {
+        $(`#screen-${s}`).classList.toggle('hidden', s !== screen)
+    }
+    document.body.classList.toggle('in-editor', screen !== 'home' && screen !== 'project')
+    // estado ativo da navbar global
+    for (const id of Object.values(NAV_BY_SCREEN)) {
+        $(`#${id}`).classList.toggle('active', NAV_BY_SCREEN[screen] === id)
+    }
 }
 
 function crumb(text: string): void {
-  $('#crumb').textContent = text
+    $('#crumb').textContent = text
 }
 
 function setNav(label: string | null, fn?: () => void): void {
-  const b = $<HTMLButtonElement>('#btn-back')
-  if (!label) {
-    b.classList.add('hidden')
-  } else {
-    b.classList.remove('hidden')
-    b.textContent = label
-    b.onclick = fn ?? null
-  }
+    const b = $<HTMLButtonElement>('#btn-back')
+    if (!label) {
+        b.classList.add('hidden')
+    } else {
+        b.classList.remove('hidden')
+        b.textContent = label
+        b.onclick = fn ?? null
+    }
 }
 
 function busyShow(label: string): void {
-  $('#busy').classList.remove('hidden')
-  $('#busy-label').textContent = label
+    $('#busy').classList.remove('hidden')
+    $('#busy-label').textContent = label
 }
 
 function busyHide(): void {
-  $('#busy').classList.add('hidden')
+    $('#busy').classList.add('hidden')
 }
 
 // ════ HOME ═══════════════════════════════════════════════
 
 async function goHome(): Promise<void> {
-  show('home')
-  setNav(null)
-  crumb('')
-  state.project = null
-  state.frames.clear()
+    show('home')
+    setNav(null)
+    crumb('')
+    state.project = null
+    state.frames.clear()
 
-  const listEl = $('#project-list')
-  listEl.innerHTML = ''
-  let projects: ProjectData[] = []
-  try {
-    projects = await listProjects()
-  } catch (err) {
-    console.error(err)
-    toast('FALHA AO LER OS PROJETOS SALVOS', true)
-  }
-  projects.sort((a, b) => b.updatedAt - a.updatedAt)
-
-  // backups no servidor local que não existem neste navegador
-  const known = new Set(projects.map((p) => p.id))
-  const backups = (await listBackups()).filter((b) => !known.has(b.id))
-  for (const b of backups) {
-    const card = document.createElement('div')
-    card.className = 'proj-card backup-card'
-    const name = document.createElement('span')
-    name.className = 'pc-name'
-    name.textContent = b.name
-    const meta = document.createElement('span')
-    meta.className = 'pc-meta'
-    meta.textContent = `backup no servidor · ${new Date(b.updatedAt).toLocaleDateString('pt-BR')} · ${(b.size / 1048576).toFixed(1)} MB`
-    const restore = document.createElement('button')
-    restore.className = 'btn btn-small'
-    restore.textContent = 'RESTAURAR_'
-    restore.onclick = async () => {
-      busyShow('RESTAURANDO DO SERVIDOR...')
-      try {
-        const p = await restoreBackup(b.id)
-        toast('PROJETO RESTAURADO ✓')
-        openProject(p)
-      } catch (err) {
+    const listEl = $('#project-list')
+    listEl.innerHTML = ''
+    let projects: ProjectData[] = []
+    try {
+        projects = await listProjects()
+    } catch (err) {
         console.error(err)
-        toast('FALHA AO RESTAURAR O BACKUP', true)
-      } finally {
-        busyHide()
-      }
+        toast('FALHA AO LER OS PROJETOS SALVOS', true)
     }
-    const del = document.createElement('button')
-    del.className = 'btn btn-small danger'
-    del.textContent = 'X'
-    del.title = 'excluir backup do servidor'
-    del.onclick = async () => {
-      if (!confirm(`Excluir o backup "${b.name}" do servidor?`)) return
-      await deleteBackup(b.id)
-      void goHome()
-    }
-    const top = document.createElement('div')
-    top.className = 'pc-top'
-    top.append(name, meta, restore, del)
-    card.append(top)
-    listEl.append(card)
-  }
+    projects.sort((a, b) => b.updatedAt - a.updatedAt)
 
-  if (!projects.length && !backups.length) {
-    const empty = document.createElement('div')
-    empty.className = 'proj-empty'
-    empty.textContent = 'nenhum projeto ainda — crie o primeiro acima'
-    listEl.append(empty)
-    return
-  }
+    // backups no servidor local que não existem neste navegador
+    const known = new Set(projects.map((p) => p.id))
+    const backups = (await listBackups()).filter((b) => !known.has(b.id))
+    for (const b of backups) {
+        const card = document.createElement('div')
+        card.className = 'proj-card backup-card'
+        const name = document.createElement('span')
+        name.className = 'pc-name'
+        name.textContent = b.name
+        const meta = document.createElement('span')
+        meta.className = 'pc-meta'
+        meta.textContent = `backup no servidor · ${new Date(b.updatedAt).toLocaleDateString('pt-BR')} · ${(b.size / 1048576).toFixed(1)} MB`
+        const restore = document.createElement('button')
+        restore.className = 'btn btn-small'
+        restore.textContent = 'RESTAURAR_'
+        restore.onclick = async () => {
+            busyShow('RESTAURANDO DO SERVIDOR...')
+            try {
+                const p = await restoreBackup(b.id)
+                toast('PROJETO RESTAURADO ✓')
+                openProject(p)
+            } catch (err) {
+                console.error(err)
+                toast('FALHA AO RESTAURAR O BACKUP', true)
+            } finally {
+                busyHide()
+            }
+        }
+        const del = document.createElement('button')
+        del.className = 'btn btn-small danger'
+        del.textContent = 'X'
+        del.title = 'excluir backup do servidor'
+        del.onclick = async () => {
+            if (!confirm(`Excluir o backup "${b.name}" do servidor?`)) return
+            await deleteBackup(b.id)
+            void goHome()
+        }
+        const top = document.createElement('div')
+        top.className = 'pc-top'
+        top.append(name, meta, restore, del)
+        card.append(top)
+        listEl.append(card)
+    }
 
-  for (const p of projects) {
-    const card = document.createElement('div')
-    card.className = 'proj-card'
-    const top = document.createElement('div')
-    top.className = 'pc-top'
-    const name = document.createElement('span')
-    name.className = 'pc-name'
-    name.textContent = p.name
-    const meta = document.createElement('span')
-    meta.className = 'pc-meta'
-    meta.textContent = `${p.animations.length} animações · ${p.refs.length} refs · ${new Date(p.updatedAt).toLocaleDateString('pt-BR')}`
-    const open = document.createElement('button')
-    open.className = 'btn btn-small'
-    open.textContent = 'ABRIR'
-    open.onclick = () => openProject(p)
-    const del = document.createElement('button')
-    del.className = 'btn btn-small danger'
-    del.textContent = 'X'
-    del.title = 'excluir projeto'
-    del.onclick = async () => {
-      if (!confirm(`Excluir o projeto "${p.name}"? Os vídeos salvos nele serão perdidos.`)) return
-      await deleteProject(p.id)
-      void goHome()
+    if (!projects.length && !backups.length) {
+        const empty = document.createElement('div')
+        empty.className = 'proj-empty'
+        empty.textContent = 'nenhum projeto ainda — crie o primeiro acima'
+        listEl.append(empty)
+        return
     }
-    top.append(name, meta, open, del)
-    card.append(top)
 
-    // preview do conteúdo: thumbs das animações + referências (até 6)
-    const blobs: { blob: Blob; title: string }[] = []
-    for (const a of p.animations) {
-      if (a.thumb) blobs.push({ blob: a.thumb, title: a.name })
+    for (const p of projects) {
+        const card = document.createElement('div')
+        card.className = 'proj-card'
+        const top = document.createElement('div')
+        top.className = 'pc-top'
+        const name = document.createElement('span')
+        name.className = 'pc-name'
+        name.textContent = p.name
+        const meta = document.createElement('span')
+        meta.className = 'pc-meta'
+        meta.textContent = `${p.animations.length} animações · ${p.refs.length} refs · ${new Date(p.updatedAt).toLocaleDateString('pt-BR')}`
+        const open = document.createElement('button')
+        open.className = 'btn btn-small'
+        open.textContent = 'ABRIR'
+        open.onclick = () => openProject(p)
+        const del = document.createElement('button')
+        del.className = 'btn btn-small danger'
+        del.textContent = 'X'
+        del.title = 'excluir projeto'
+        del.onclick = async () => {
+            if (!confirm(`Excluir o projeto "${p.name}"? Os vídeos salvos nele serão perdidos.`)) return
+            await deleteProject(p.id)
+            void goHome()
+        }
+        top.append(name, meta, open, del)
+        card.append(top)
+
+        // preview do conteúdo: thumbs das animações + referências (até 6)
+        const blobs: { blob: Blob; title: string }[] = []
+        for (const a of p.animations) {
+            if (a.thumb) blobs.push({ blob: a.thumb, title: a.name })
+        }
+        for (const r of p.refs) blobs.push({ blob: r.blob, title: r.name })
+        if (blobs.length) {
+            const strip = document.createElement('div')
+            strip.className = 'pc-thumbs'
+            for (const t of blobs.slice(0, 6)) {
+                const img = document.createElement('img')
+                img.src = URL.createObjectURL(t.blob)
+                img.onload = () => URL.revokeObjectURL(img.src)
+                img.title = t.title
+                strip.append(img)
+            }
+            if (blobs.length > 6) {
+                const more = document.createElement('span')
+                more.className = 'dim pc-more'
+                more.textContent = `+${blobs.length - 6}`
+                strip.append(more)
+            }
+            card.append(strip)
+        }
+        card.ondblclick = () => openProject(p)
+        listEl.append(card)
     }
-    for (const r of p.refs) blobs.push({ blob: r.blob, title: r.name })
-    if (blobs.length) {
-      const strip = document.createElement('div')
-      strip.className = 'pc-thumbs'
-      for (const t of blobs.slice(0, 6)) {
-        const img = document.createElement('img')
-        img.src = URL.createObjectURL(t.blob)
-        img.onload = () => URL.revokeObjectURL(img.src)
-        img.title = t.title
-        strip.append(img)
-      }
-      if (blobs.length > 6) {
-        const more = document.createElement('span')
-        more.className = 'dim pc-more'
-        more.textContent = `+${blobs.length - 6}`
-        strip.append(more)
-      }
-      card.append(strip)
-    }
-    card.ondblclick = () => openProject(p)
-    listEl.append(card)
-  }
 }
 
 $<HTMLButtonElement>('#btn-create').onclick = async () => {
-  const input = $<HTMLInputElement>('#new-proj-name')
-  const name = input.value.trim()
-  if (!name) {
-    toast('DÊ UM NOME AO PROJETO', true)
-    input.focus()
-    return
-  }
-  const p = newProject(uid(), name)
-  await putProject(p)
-  input.value = ''
-  openProject(p)
+    const input = $<HTMLInputElement>('#new-proj-name')
+    const name = input.value.trim()
+    if (!name) {
+        toast('DÊ UM NOME AO PROJETO', true)
+        input.focus()
+        return
+    }
+    const p = newProject(uid(), name)
+    await putProject(p)
+    input.value = ''
+    openProject(p)
 }
 $<HTMLInputElement>('#new-proj-name').onkeydown = (e) => {
-  if (e.code === 'Enter') $('#btn-create').click()
+    if (e.code === 'Enter') $('#btn-create').click()
 }
 
 // ── navbar global (fixa em todas as telas) ────────────────
 
 /** volta para o projeto aberto, ou para a home */
 function backFromTool(): void {
-  if (state.project) goProject()
-  else void goHome()
+    if (state.project) goProject()
+    else void goHome()
 }
 
 function toolNavLabel(): string {
-  return state.project ? '← PROJETO' : '← INÍCIO'
+    return state.project ? '← PROJETO' : '← INÍCIO'
 }
 
 function goGenImage(): void {
-  show('genimage')
-  crumb(state.project ? `${state.project.name} / gerar imagem` : 'gerador de imagem')
-  setNav(toolNavLabel(), backFromTool)
-  cleanup = initGenImage()
+    show('genimage')
+    crumb(state.project ? `${state.project.name} / gerar imagem` : 'gerador de imagem')
+    setNav(toolNavLabel(), backFromTool)
+    cleanup = initGenImage()
 }
 
 function goNormalize(): void {
-  show('normalize')
-  crumb('normalizador de referências')
-  setNav(toolNavLabel(), backFromTool)
-  cleanup = initNormalize()
+    show('normalize')
+    crumb('normalizador de referências')
+    setNav(toolNavLabel(), backFromTool)
+    cleanup = initNormalize()
 }
 
 function goSlicer(): void {
-  show('slicer')
-  crumb('fatiador de itens')
-  setNav(toolNavLabel(), backFromTool)
-  cleanup = initSlicer()
+    show('slicer')
+    crumb('fatiador de itens')
+    setNav(toolNavLabel(), backFromTool)
+    cleanup = initSlicer()
 }
 
 function goAtlasTool(): void {
-  show('atlas')
-  crumb('atlas de ícones')
-  setNav(toolNavLabel(), backFromTool)
-  cleanup = initAtlas()
+    show('atlas')
+    crumb('atlas de ícones')
+    setNav(toolNavLabel(), backFromTool)
+    cleanup = initAtlas()
 }
 
 $<HTMLButtonElement>('#nav-genimage').onclick = goGenImage
@@ -260,203 +280,208 @@ $<HTMLButtonElement>('#nav-normalize').onclick = goNormalize
 $<HTMLButtonElement>('#nav-slicer').onclick = goSlicer
 $<HTMLButtonElement>('#nav-atlas').onclick = goAtlasTool
 $<HTMLButtonElement>('#nav-genvideo').onclick = () => {
-  if (!state.project) {
-    toast('ABRA UM PROJETO PARA GERAR VÍDEO — ELE USA AS REFERÊNCIAS DO PROJETO', true)
-    return
-  }
-  goGenVideo()
+    if (!state.project) {
+        toast('ABRA UM PROJETO PARA GERAR VÍDEO — ELE USA AS REFERÊNCIAS DO PROJETO', true)
+        return
+    }
+    goGenVideo()
 }
 $('#logo-home').onclick = () => {
-  void saveProject()
-  void goHome()
+    void saveProject()
+    void goHome()
 }
 
 function openProject(p: ProjectData): void {
-  openProjectState(p)
-  goProject()
+    openProjectState(p)
+    goProject()
 }
 
 // ════ PROJETO (dashboard) ════════════════════════════════
 
 function goProject(): void {
-  const p = state.project!
-  show('project')
-  setNav('← PROJETOS', () => {
-    void saveProject().then(goHome)
-  })
-  crumb(p.name)
-
-  const title = $<HTMLInputElement>('#proj-title')
-  title.value = p.name
-  title.oninput = () => {
-    p.name = title.value.trim() || p.name
+    const p = state.project!
+    show('project')
+    setNav('← PROJETOS', () => {
+        void saveProject().then(goHome)
+    })
     crumb(p.name)
-  }
-  title.onchange = () => void saveProject()
 
-  $<HTMLButtonElement>('#btn-align').onclick = () => {
-    if (!p.animations.length) {
-      toast('ADICIONE AO MENOS 1 VÍDEO', true)
-      return
+    const title = $<HTMLInputElement>('#proj-title')
+    title.value = p.name
+    title.oninput = () => {
+        p.name = title.value.trim() || p.name
+        crumb(p.name)
     }
-    goAlign()
-  }
+    title.onchange = () => void saveProject()
 
-  $<HTMLButtonElement>('#btn-genvideo-proj').onclick = goGenVideo
-  $<HTMLButtonElement>('#btn-sprites-proj').onclick = goSprites
-  $<HTMLButtonElement>('#btn-backup-proj').onclick = async () => {
-    if (!(await backupAvailable())) {
-      toast('SERVIDOR DE BACKUP FORA DO AR — RODE npm run dev (OU npm run server)', true)
-      return
+    $<HTMLButtonElement>('#btn-align').onclick = () => {
+        if (!p.animations.length) {
+            toast('ADICIONE AO MENOS 1 VÍDEO', true)
+            return
+        }
+        goAlign()
     }
-    busyShow('ENVIANDO BACKUP...')
-    try {
-      await saveProject()
-      await uploadBackup(p)
-      toast('BACKUP NO SERVIDOR ✓')
-    } catch (err) {
-      console.error(err)
-      toast('FALHA NO BACKUP', true)
-    } finally {
-      busyHide()
-    }
-  }
 
-  hideImportPanel()
-  renderRefsRow()
-  renderAnimGrid()
+    $<HTMLButtonElement>('#btn-genvideo-proj').onclick = goGenVideo
+    $<HTMLButtonElement>('#btn-sprites-proj').onclick = goSprites
+    $<HTMLButtonElement>('#btn-backup-proj').onclick = async () => {
+        if (!(await backupAvailable())) {
+            toast('SERVIDOR DE BACKUP FORA DO AR — RODE npm run dev (OU npm run server)', true)
+            return
+        }
+        busyShow('ENVIANDO BACKUP...')
+        try {
+            await saveProject()
+            await uploadBackup(p)
+            toast('BACKUP NO SERVIDOR ✓')
+        } catch (err) {
+            console.error(err)
+            toast('FALHA NO BACKUP', true)
+        } finally {
+            busyHide()
+        }
+    }
+
+    hideImportPanel()
+    renderRefsRow()
+    renderAnimGrid()
 }
 
 // ── referências do projeto ────────────────────────────────
 
 function renderRefsRow(): void {
-  const p = state.project!
-  const row = $('#refs-row')
-  row.innerHTML = ''
-  $('#refs-count').textContent = p.refs.length ? `· ${p.refs.length}` : ''
-  if (!p.refs.length) {
-    const hint = document.createElement('span')
-    hint.className = 'dim refs-empty'
-    hint.textContent =
-      'adicione imagens do personagem — ficam salvas no projeto e alimentam o gerador de vídeo'
-    row.append(hint)
-    return
-  }
-  for (const ref of p.refs) {
-    const cell = document.createElement('div')
-    cell.className = 'ref-cell'
-    const img = document.createElement('img')
-    img.src = URL.createObjectURL(ref.blob)
-    img.onload = () => URL.revokeObjectURL(img.src)
-    img.title = ref.name
-    const del = document.createElement('button')
-    del.className = 'ref-del'
-    del.textContent = '×'
-    del.title = 'remover referência'
-    del.onclick = async () => {
-      p.refs = p.refs.filter((r) => r.id !== ref.id)
-      await saveProject()
-      renderRefsRow()
+    const p = state.project!
+    const row = $('#refs-row')
+    row.innerHTML = ''
+    $('#refs-count').textContent = p.refs.length ? `· ${p.refs.length}` : ''
+    if (!p.refs.length) {
+        const hint = document.createElement('span')
+        hint.className = 'dim refs-empty'
+        hint.textContent =
+            'adicione imagens do personagem — ficam salvas no projeto e alimentam o gerador de vídeo'
+        row.append(hint)
+        return
     }
-    cell.append(img, del)
-    row.append(cell)
-  }
+    for (const ref of p.refs) {
+        const cell = document.createElement('div')
+        cell.className = 'ref-cell'
+        const img = document.createElement('img')
+        img.src = URL.createObjectURL(ref.blob)
+        img.onload = () => URL.revokeObjectURL(img.src)
+        img.title = ref.name
+        const del = document.createElement('button')
+        del.className = 'ref-del'
+        del.textContent = '×'
+        del.title = 'remover referência'
+        del.onclick = async () => {
+            p.refs = p.refs.filter((r) => r.id !== ref.id)
+            await saveProject()
+            renderRefsRow()
+        }
+        cell.append(img, del)
+        row.append(cell)
+    }
 }
 
 const refFileInput = $<HTMLInputElement>('#ref-files')
 $('#btn-add-ref').onclick = () => refFileInput.click()
 refFileInput.onchange = () => {
-  if (refFileInput.files?.length) void addRefFiles(Array.from(refFileInput.files))
-  refFileInput.value = ''
+    if (refFileInput.files?.length) void addRefFiles(Array.from(refFileInput.files))
+    refFileInput.value = ''
 }
 $('#refs-row').ondragover = (e) => e.preventDefault()
 $('#refs-row').ondrop = (e) => {
-  e.preventDefault()
-  if (e.dataTransfer?.files?.length) void addRefFiles(Array.from(e.dataTransfer.files))
+    e.preventDefault()
+    if (e.dataTransfer?.files?.length) void addRefFiles(Array.from(e.dataTransfer.files))
 }
 
 async function addRefFiles(files: File[]): Promise<void> {
-  const p = state.project
-  if (!p) return
-  let added = 0
-  for (const f of files) {
-    if (!f.type.startsWith('image/')) continue
-    p.refs.push({ id: uid(), name: f.name, blob: f })
-    added++
-  }
-  if (!added) {
-    toast('NENHUMA IMAGEM VÁLIDA', true)
-    return
-  }
-  await saveProject()
-  renderRefsRow()
+    const p = state.project
+    if (!p) return
+    let added = 0
+    for (const f of files) {
+        if (!f.type.startsWith('image/')) continue
+        p.refs.push({ id: uid(), name: f.name, blob: f })
+        added++
+    }
+    if (!added) {
+        toast('NENHUMA IMAGEM VÁLIDA', true)
+        return
+    }
+    await saveProject()
+    renderRefsRow()
 }
 
 function renderAnimGrid(): void {
-  const p = state.project!
-  const grid = $('#anim-grid')
-  grid.innerHTML = ''
+    const p = state.project!
+    const grid = $('#anim-grid')
+    grid.innerHTML = ''
 
-  const add = document.createElement('button')
-  add.className = 'anim-card add-card'
-  add.innerHTML = '+ VÍDEO'
-  add.onclick = () => $<HTMLInputElement>('#anim-file').click()
-  add.ondragover = (e) => { e.preventDefault(); add.classList.add('dragover') }
-  add.ondragleave = () => add.classList.remove('dragover')
-  add.ondrop = (e) => {
-    e.preventDefault()
-    add.classList.remove('dragover')
-    const f = e.dataTransfer?.files?.[0]
-    if (f) void chooseFile(f)
-  }
-  grid.append(add)
-
-  for (const a of p.animations) {
-    const card = document.createElement('div')
-    card.className = 'anim-card'
-
-    const thumb = document.createElement('div')
-    thumb.className = 'ac-thumb checker'
-    if (a.thumb) {
-      const img = document.createElement('img')
-      img.src = URL.createObjectURL(a.thumb)
-      img.onload = () => URL.revokeObjectURL(img.src)
-      thumb.append(img)
+    const add = document.createElement('button')
+    add.className = 'anim-card add-card'
+    add.innerHTML = '+ VÍDEO'
+    add.onclick = () => $<HTMLInputElement>('#anim-file').click()
+    add.ondragover = (e) => {
+        e.preventDefault()
+        add.classList.add('dragover')
     }
-    const body = document.createElement('div')
-    body.className = 'ac-body'
-    const name = document.createElement('div')
-    name.className = 'ac-name'
-    name.textContent = a.name
-    const meta = document.createElement('div')
-    meta.className = 'ac-meta dim'
-    const sel = a.selected.filter(Boolean).length
-    meta.textContent = `${sel}/${a.selected.length} frames · ${a.fps} fps` + (a.crossfade ? ` · fade ${a.crossfade}` : '')
-    body.append(name, meta)
-
-    const actions = document.createElement('div')
-    actions.className = 'ac-actions'
-    const edit = document.createElement('button')
-    edit.className = 'btn btn-small'
-    edit.textContent = 'EDITAR_'
-    edit.onclick = () => void goEditor(a)
-    const del = document.createElement('button')
-    del.className = 'btn btn-small danger'
-    del.textContent = 'X'
-    del.title = 'remover animação'
-    del.onclick = async () => {
-      if (!confirm(`Remover a animação "${a.name}"?`)) return
-      p.animations = p.animations.filter((x) => x.id !== a.id)
-      state.frames.delete(a.id)
-      await saveProject()
-      renderAnimGrid()
+    add.ondragleave = () => add.classList.remove('dragover')
+    add.ondrop = (e) => {
+        e.preventDefault()
+        add.classList.remove('dragover')
+        const f = e.dataTransfer?.files?.[0]
+        if (f) void chooseFile(f)
     }
-    actions.append(edit, del)
+    grid.append(add)
 
-    card.append(thumb, body, actions)
-    card.ondblclick = () => void goEditor(a)
-    grid.append(card)
-  }
+    for (const a of p.animations) {
+        const card = document.createElement('div')
+        card.className = 'anim-card'
+
+        const thumb = document.createElement('div')
+        thumb.className = 'ac-thumb checker'
+        if (a.thumb) {
+            const img = document.createElement('img')
+            img.src = URL.createObjectURL(a.thumb)
+            img.onload = () => URL.revokeObjectURL(img.src)
+            thumb.append(img)
+        }
+        const body = document.createElement('div')
+        body.className = 'ac-body'
+        const name = document.createElement('div')
+        name.className = 'ac-name'
+        name.textContent = a.name
+        const meta = document.createElement('div')
+        meta.className = 'ac-meta dim'
+        const sel = a.selected.filter(Boolean).length
+        meta.textContent =
+            `${sel}/${a.selected.length} frames · ${a.fps} fps` +
+            (a.crossfade ? ` · fade ${a.crossfade}` : '')
+        body.append(name, meta)
+
+        const actions = document.createElement('div')
+        actions.className = 'ac-actions'
+        const edit = document.createElement('button')
+        edit.className = 'btn btn-small'
+        edit.textContent = 'EDITAR_'
+        edit.onclick = () => void goEditor(a)
+        const del = document.createElement('button')
+        del.className = 'btn btn-small danger'
+        del.textContent = 'X'
+        del.title = 'remover animação'
+        del.onclick = async () => {
+            if (!confirm(`Remover a animação "${a.name}"?`)) return
+            p.animations = p.animations.filter((x) => x.id !== a.id)
+            state.frames.delete(a.id)
+            await saveProject()
+            renderAnimGrid()
+        }
+        actions.append(edit, del)
+
+        card.append(thumb, body, actions)
+        card.ondblclick = () => void goEditor(a)
+        grid.append(card)
+    }
 }
 
 // ── importação de vídeo ───────────────────────────────────
@@ -469,197 +494,205 @@ let pendingDuration = 0
 let importBusy = false
 
 fileInput.onchange = () => {
-  const f = fileInput.files?.[0]
-  if (f) void chooseFile(f)
-  fileInput.value = ''
+    const f = fileInput.files?.[0]
+    if (f) void chooseFile(f)
+    fileInput.value = ''
 }
 
 async function chooseFile(f: File): Promise<void> {
-  if (importBusy) return
-  if (!f.type.startsWith('video/') && !/\.(mp4|webm|mov|mkv|avi)$/i.test(f.name)) {
-    toast('O ARQUIVO NÃO É UM VÍDEO', true)
-    return
-  }
-  const url = URL.createObjectURL(f)
-  const v = document.createElement('video')
-  v.preload = 'metadata'
-  v.src = url
-  try {
-    await new Promise<void>((resolve, reject) => {
-      v.onloadedmetadata = () => resolve()
-      v.onerror = () => reject(new Error('formato não suportado'))
-    })
-  } catch {
-    URL.revokeObjectURL(url)
-    toast('NÃO FOI POSSÍVEL LER O VÍDEO', true)
-    return
-  }
+    if (importBusy) return
+    if (!f.type.startsWith('video/') && !/\.(mp4|webm|mov|mkv|avi)$/i.test(f.name)) {
+        toast('O ARQUIVO NÃO É UM VÍDEO', true)
+        return
+    }
+    const url = URL.createObjectURL(f)
+    const v = document.createElement('video')
+    v.preload = 'metadata'
+    v.src = url
+    try {
+        await new Promise<void>((resolve, reject) => {
+            v.onloadedmetadata = () => resolve()
+            v.onerror = () => reject(new Error('formato não suportado'))
+        })
+    } catch {
+        URL.revokeObjectURL(url)
+        toast('NÃO FOI POSSÍVEL LER O VÍDEO', true)
+        return
+    }
 
-  pendingFile = f
-  pendingDuration = v.duration
-  $('#fi-name').textContent = f.name
-  $('#fi-meta').textContent =
-    `${(f.size / 1048576).toFixed(1)} MB · ${v.videoWidth}×${v.videoHeight} · ${pendingDuration.toFixed(1)}s`
-  URL.revokeObjectURL(url)
-  $('#import-panel').classList.remove('hidden')
-  $('#extract-progress').classList.add('hidden')
-  $<HTMLButtonElement>('#btn-extract').disabled = false
-  updateEstimate()
+    pendingFile = f
+    pendingDuration = v.duration
+    $('#fi-name').textContent = f.name
+    $('#fi-meta').textContent =
+        `${(f.size / 1048576).toFixed(1)} MB · ${v.videoWidth}×${v.videoHeight} · ${pendingDuration.toFixed(1)}s`
+    URL.revokeObjectURL(url)
+    $('#import-panel').classList.remove('hidden')
+    $('#extract-progress').classList.add('hidden')
+    $<HTMLButtonElement>('#btn-extract').disabled = false
+    updateEstimate()
 }
 
 function updateEstimate(): void {
-  if (!pendingFile) return
-  const fps = Number(fpsSelect.value)
-  const wanted = Math.max(1, Math.floor(pendingDuration * fps))
-  const total = Math.min(wanted, MAX_FRAMES)
-  $('#extract-estimate').textContent =
-    `≈ ${total} FRAMES` + (wanted > MAX_FRAMES ? ` (LIMITE ${MAX_FRAMES})` : '')
+    if (!pendingFile) return
+    const fps = Number(fpsSelect.value)
+    const wanted = Math.max(1, Math.floor(pendingDuration * fps))
+    const total = Math.min(wanted, MAX_FRAMES)
+    $('#extract-estimate').textContent =
+        `≈ ${total} FRAMES` + (wanted > MAX_FRAMES ? ` (LIMITE ${MAX_FRAMES})` : '')
 }
 
 fpsSelect.onchange = updateEstimate
 
 function hideImportPanel(): void {
-  $('#import-panel').classList.add('hidden')
-  pendingFile = null
+    $('#import-panel').classList.add('hidden')
+    pendingFile = null
 }
 
 $<HTMLButtonElement>('#btn-import-cancel').onclick = hideImportPanel
 
 $<HTMLButtonElement>('#btn-extract').onclick = async () => {
-  const p = state.project
-  if (!pendingFile || importBusy || !p) return
-  importBusy = true
-  const btn = $<HTMLButtonElement>('#btn-extract')
-  btn.disabled = true
-  $('#extract-progress').classList.remove('hidden')
+    const p = state.project
+    if (!pendingFile || importBusy || !p) return
+    importBusy = true
+    const btn = $<HTMLButtonElement>('#btn-extract')
+    btn.disabled = true
+    $('#extract-progress').classList.remove('hidden')
 
-  const fps = Number(fpsSelect.value)
-  const maxDim = Number(resSelect.value)
+    const fps = Number(fpsSelect.value)
+    const maxDim = Number(resSelect.value)
 
-  try {
-    const result = await extractFrames(pendingFile, fps, maxDim, (done, total) => {
-      $('#progress-bar').style.width = `${(done / total) * 100}%`
-      $('#progress-label').textContent =
-        `EXTRAINDO ${String(done).padStart(3, '0')}/${String(total).padStart(3, '0')}`
-    })
-    if (result.truncated) toast(`LIMITE DE ${MAX_FRAMES} FRAMES ATINGIDO`)
+    try {
+        const result = await extractFrames(pendingFile, fps, maxDim, (done, total) => {
+            $('#progress-bar').style.width = `${(done / total) * 100}%`
+            $('#progress-label').textContent =
+                `EXTRAINDO ${String(done).padStart(3, '0')}/${String(total).padStart(3, '0')}`
+        })
+        if (result.truncated) toast(`LIMITE DE ${MAX_FRAMES} FRAMES ATINGIDO`)
 
-    const anim: AnimationData = {
-      id: uid(),
-      name: pendingFile.name.replace(/\.[^.]+$/, '').replace(/[^\w\s-]+/g, '').trim() || 'animacao',
-      video: pendingFile,
-      videoName: pendingFile.name,
-      extractFps: fps,
-      maxDim,
-      chroma: { ...DEFAULT_SETTINGS, key: autoKey(result.frames[0].full) },
-      selected: result.frames.map(() => true),
-      speed: result.frames.map(() => 1),
-      curve: [{ t: 0, v: 1 }, { t: 1, v: 1 }],
-      crossfade: 0,
-      fps,
-      align: { dx: 0, dy: 0, scale: 1 },
-      thumb: await makeThumbBlob(result.frames),
+        const anim: AnimationData = {
+            id: uid(),
+            name:
+                pendingFile.name
+                    .replace(/\.[^.]+$/, '')
+                    .replace(/[^\w\s-]+/g, '')
+                    .trim() || 'animacao',
+            video: pendingFile,
+            videoName: pendingFile.name,
+            extractFps: fps,
+            maxDim,
+            chroma: { ...DEFAULT_SETTINGS, key: autoKey(result.frames[0].full) },
+            selected: result.frames.map(() => true),
+            speed: result.frames.map(() => 1),
+            curve: [
+                { t: 0, v: 1 },
+                { t: 1, v: 1 },
+            ],
+            crossfade: 0,
+            fps,
+            align: { dx: 0, dy: 0, scale: 1 },
+            thumb: await makeThumbBlob(result.frames),
+        }
+        state.frames.set(anim.id, result.frames)
+        p.animations.push(anim)
+        await saveProject()
+        hideImportPanel()
+        void goEditor(anim)
+    } catch (err) {
+        console.error(err)
+        toast('FALHA NA EXTRAÇÃO — TENTE OUTRO FORMATO', true)
+        btn.disabled = false
+        $('#extract-progress').classList.add('hidden')
+    } finally {
+        importBusy = false
     }
-    state.frames.set(anim.id, result.frames)
-    p.animations.push(anim)
-    await saveProject()
-    hideImportPanel()
-    void goEditor(anim)
-  } catch (err) {
-    console.error(err)
-    toast('FALHA NA EXTRAÇÃO — TENTE OUTRO FORMATO', true)
-    btn.disabled = false
-    $('#extract-progress').classList.add('hidden')
-  } finally {
-    importBusy = false
-  }
 }
 
 function makeThumbBlob(frames: ExtractedFrame[]): Promise<Blob | null> {
-  return new Promise((resolve) => {
-    const t = frames[0]?.thumb
-    if (!t) {
-      resolve(null)
-      return
-    }
-    const cv = document.createElement('canvas')
-    cv.width = t.width
-    cv.height = t.height
-    cv.getContext('2d')!.drawImage(t, 0, 0)
-    cv.toBlob((b) => resolve(b), 'image/png')
-  })
+    return new Promise((resolve) => {
+        const t = frames[0]?.thumb
+        if (!t) {
+            resolve(null)
+            return
+        }
+        const cv = document.createElement('canvas')
+        cv.width = t.width
+        cv.height = t.height
+        cv.getContext('2d')!.drawImage(t, 0, 0)
+        cv.toBlob((b) => resolve(b), 'image/png')
+    })
 }
 
 // ════ EDITOR ═════════════════════════════════════════════
 
 async function goEditor(anim: AnimationData): Promise<void> {
-  const p = state.project!
-  busyShow('CARREGANDO FRAMES...')
-  try {
-    const frames = await ensureFrames(anim, (d, t) =>
-      busyShow(`EXTRAINDO ${String(d).padStart(3, '0')}/${String(t).padStart(3, '0')}`))
-    show('editor')
-    crumb(`${p.name} / ${anim.name}`)
-    setNav('← VOLTAR', () => {
-      void saveProject()
-      goProject()
-    })
-    cleanup = initEditor(anim, frames)
-  } catch (err) {
-    console.error(err)
-    toast('FALHA AO CARREGAR O VÍDEO', true)
-  } finally {
-    busyHide()
-  }
+    const p = state.project!
+    busyShow('CARREGANDO FRAMES...')
+    try {
+        const frames = await ensureFrames(anim, (d, t) =>
+            busyShow(`EXTRAINDO ${String(d).padStart(3, '0')}/${String(t).padStart(3, '0')}`),
+        )
+        show('editor')
+        crumb(`${p.name} / ${anim.name}`)
+        setNav('← VOLTAR', () => {
+            void saveProject()
+            goProject()
+        })
+        cleanup = initEditor(anim, frames)
+    } catch (err) {
+        console.error(err)
+        toast('FALHA AO CARREGAR O VÍDEO', true)
+    } finally {
+        busyHide()
+    }
 }
 
 // ════ GERADOR DE VÍDEO ═══════════════════════════════════
 
 function goGenVideo(): void {
-  const p = state.project!
-  show('genvideo')
-  crumb(`${p.name} / gerar vídeo`)
-  setNav('← VOLTAR', () => {
-    void saveProject()
-    goProject()
-  })
-  cleanup = initGenVideo({
-    onUse: (file) => {
-      goProject()
-      void chooseFile(file)
-    },
-  })
+    const p = state.project!
+    show('genvideo')
+    crumb(`${p.name} / gerar vídeo`)
+    setNav('← VOLTAR', () => {
+        void saveProject()
+        goProject()
+    })
+    cleanup = initGenVideo({
+        onUse: (file) => {
+            goProject()
+            void chooseFile(file)
+        },
+    })
 }
 
 // ════ ALINHAMENTO ════════════════════════════════════════
 
 function goAlign(): void {
-  const p = state.project!
-  show('align')
-  crumb(`${p.name} / alinhamento`)
-  setNav('← VOLTAR', () => {
-    void saveProject()
-    goProject()
-  })
-  $<HTMLButtonElement>('#btn-align-next').onclick = goSprites
-  cleanup = initAlign()
+    const p = state.project!
+    show('align')
+    crumb(`${p.name} / alinhamento`)
+    setNav('← VOLTAR', () => {
+        void saveProject()
+        goProject()
+    })
+    $<HTMLButtonElement>('#btn-align-next').onclick = goSprites
+    cleanup = initAlign()
 }
 
 // ════ SPRITES ════════════════════════════════════════════
 
 function goSprites(): void {
-  const p = state.project!
-  if (!p.animations.length) {
-    toast('ADICIONE AO MENOS 1 VÍDEO', true)
-    return
-  }
-  show('sprites')
-  crumb(`${p.name} / sprites`)
-  setNav('← VOLTAR', () => {
-    void saveProject()
-    goProject()
-  })
-  cleanup = initSprites()
+    const p = state.project!
+    if (!p.animations.length) {
+        toast('ADICIONE AO MENOS 1 VÍDEO', true)
+        return
+    }
+    show('sprites')
+    crumb(`${p.name} / sprites`)
+    setNav('← VOLTAR', () => {
+        void saveProject()
+        goProject()
+    })
+    cleanup = initSprites()
 }
 
 // ════ start ══════════════════════════════════════════════

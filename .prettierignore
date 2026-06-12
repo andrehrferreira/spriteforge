@@ -1,0 +1,8 @@
+dist/
+node_modules/
+data/
+.rulebook/
+.claude/
+.playwright-mcp/
+package-lock.json
+*.md
