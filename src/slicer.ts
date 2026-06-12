@@ -263,9 +263,11 @@ export function fitRect(box: Box, out: number, marginPct: number): { dx: number;
 
 export function initSlicer(): () => void {
   let alive = true
+  let original: ImageBitmap | null = null // imagem como veio (para reprocessar)
   let src: HTMLCanvasElement | null = null // imagem de trabalho (fundo removido)
   let trimMask: Uint8Array | null = null // alpha >= 8: para aparar o corte
   let baseName = 'item'
+  let tolTimer = 0
   let boxes: Box[] = []
   let selected = -1
   let lastVs = 1
@@ -318,19 +320,26 @@ export function initSlicer(): () => void {
       if (!alive) return
       baseName = slugify(f.name.replace(/\.[^.]+$/, ''))
       nameInput.value = baseName
-      src = prepareSource(bmp)
-      bmp.close()
-      // máscara de conteúdo visível (alpha baixo conta): apara o corte na
-      // composição para o item ocupar o quadro inteiro
-      const d = src.getContext('2d')!.getImageData(0, 0, src.width, src.height).data
-      trimMask = new Uint8Array(src.width * src.height)
-      for (let i = 0; i < trimMask.length; i++) trimMask[i] = d[i * 4 + 3] >= 8 ? 1 : 0
+      original?.close()
+      original = bmp // guarda o original: a tolerância pode ser reaplicada
+      rebuildSource()
       detect()
       toast(`${boxes.length} ITENS DETECTADOS`)
     } catch (err) {
       console.error(err)
       toast('FALHA AO LER A IMAGEM', true)
     }
+  }
+
+  /** reprocessa a remoção de fundo com a tolerância atual + máscara de corte */
+  function rebuildSource(): void {
+    if (!original) return
+    src = prepareSource(original)
+    // máscara de conteúdo visível (alpha baixo conta): apara o corte na
+    // composição para o item ocupar o quadro inteiro
+    const d = src.getContext('2d')!.getImageData(0, 0, src.width, src.height).data
+    trimMask = new Uint8Array(src.width * src.height)
+    for (let i = 0; i < trimMask.length; i++) trimMask[i] = d[i * 4 + 3] >= 8 ? 1 : 0
   }
 
   /** desenha a imagem e, se for opaca, remove o fundo sólido por flood fill */
@@ -418,8 +427,22 @@ export function initSlicer(): () => void {
       toast('CARREGUE UMA IMAGEM PRIMEIRO', true)
       return
     }
+    rebuildSource() // reaplica a remoção de fundo com a tolerância atual
     detect()
     toast(`${boxes.length} ITENS DETECTADOS`)
+  }
+
+  // tolerância do fundo reaplica ao vivo (debounce) — preview imediato do
+  // que a remoção está comendo ou deixando de halo
+  tolInput.oninput = () => {
+    if (!original) return
+    clearTimeout(tolTimer)
+    tolTimer = window.setTimeout(() => {
+      rebuildSource()
+      render()
+      renderItemPreview()
+      status(`tolerância ${tolInput.value} aplicada — REDETECTAR refaz as caixas`)
+    }, 250)
   }
 
   function updateInfo(): void {
@@ -765,6 +788,8 @@ export function initSlicer(): () => void {
 
   return () => {
     alive = false
+    clearTimeout(tolTimer)
+    original?.close()
     document.removeEventListener('keydown', onKey)
     window.removeEventListener('resize', resizeCanvas)
   }
