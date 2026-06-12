@@ -27,6 +27,7 @@ export const IMAGE_MODELS = [
   { id: 'google/gemini-3.1-flash-image-preview', name: 'Google · Gemini 3.1 Flash Image' },
   { id: 'google/gemini-3-pro-image-preview', name: 'Google · Gemini 3 Pro Image' },
   { id: 'x-ai/grok-imagine-image-quality', name: 'xAI · Grok Imagine Image (quality)' },
+  { id: 'openai/gpt-5.4-image-2', name: 'OpenAI · GPT-5.4 Image 2' },
 ] as const
 
 /** extrai as data URLs das imagens de uma resposta do chat/completions */
