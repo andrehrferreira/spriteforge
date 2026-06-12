@@ -9,7 +9,6 @@
 import type { IconRecord, ProjectData, SpriteSheet } from './types'
 
 const DB_NAME = 'spriteforge'
-const DB_VERSION = 3
 const PROJECTS = 'projects'
 const SHEETS = 'spritesheets'
 const ICONS = 'icons'
@@ -28,27 +27,59 @@ function isQuota(err: unknown): boolean {
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
+function openWith(version?: number): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = version ? indexedDB.open(DB_NAME, version) : indexedDB.open(DB_NAME)
+    req.onupgradeneeded = () => {
+      // migração não destrutiva: cria apenas o que não existe
+      const db = req.result
+      if (!db.objectStoreNames.contains(PROJECTS)) {
+        db.createObjectStore(PROJECTS, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(SHEETS)) {
+        const s = db.createObjectStore(SHEETS, { keyPath: 'id' })
+        s.createIndex('projectId', 'projectId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(ICONS)) {
+        db.createObjectStore(ICONS, { keyPath: 'id' })
+      }
+    }
+    req.onblocked = () => console.warn('[db] upgrade bloqueado — feche outras abas do SpriteForge')
+    req.onsuccess = () => {
+      const db = req.result
+      // permite que outra aba faça upgrade sem travar
+      db.onversionchange = () => {
+        db.close()
+        dbPromise = null
+      }
+      resolve(db)
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+/**
+ * Auto-reparo: se a conexão abrir sem algum store (ex.: upgrade feito por
+ * uma versão antiga do código), força um bump de versão que cria o que
+ * falta — sem tocar nos dados existentes.
+ */
+async function ensureStores(db: IDBDatabase): Promise<IDBDatabase> {
+  const missing = [PROJECTS, SHEETS, ICONS].some((s) => !db.objectStoreNames.contains(s))
+  if (!missing) return db
+  const next = db.version + 1
+  db.close()
+  return openWith(next)
+}
+
 function openDb(): Promise<IDBDatabase> {
   if (!dbPromise) {
-    dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION)
-      req.onupgradeneeded = () => {
-        // migração não destrutiva: cria apenas o que não existe
-        const db = req.result
-        if (!db.objectStoreNames.contains(PROJECTS)) {
-          db.createObjectStore(PROJECTS, { keyPath: 'id' })
-        }
-        if (!db.objectStoreNames.contains(SHEETS)) {
-          const s = db.createObjectStore(SHEETS, { keyPath: 'id' })
-          s.createIndex('projectId', 'projectId', { unique: false })
-        }
-        if (!db.objectStoreNames.contains(ICONS)) {
-          db.createObjectStore(ICONS, { keyPath: 'id' })
-        }
-      }
-      req.onsuccess = () => resolve(req.result)
-      req.onerror = () => reject(req.error)
-    })
+    // abre na versão atual do banco (a que for) e repara o schema se preciso
+    dbPromise = openWith()
+      .then(ensureStores)
+      .catch((err) => {
+        dbPromise = null
+        throw err
+      })
   }
   return dbPromise
 }
