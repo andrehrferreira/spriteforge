@@ -24,10 +24,9 @@ const LS = {
 }
 
 export const IMAGE_MODELS = [
-  { id: 'google/gemini-2.5-flash-image', name: 'Google · Gemini 2.5 Flash Image' },
   { id: 'google/gemini-3.1-flash-image-preview', name: 'Google · Gemini 3.1 Flash Image' },
+  { id: 'google/gemini-3-pro-image-preview', name: 'Google · Gemini 3 Pro Image' },
   { id: 'x-ai/grok-imagine-image-quality', name: 'xAI · Grok Imagine Image (quality)' },
-  { id: 'black-forest-labs/flux.2-pro', name: 'BFL · FLUX.2 Pro' },
 ] as const
 
 /** extrai as data URLs das imagens de uma resposta do chat/completions */
