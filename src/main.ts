@@ -5,6 +5,7 @@
 import './style.css'
 import { initAlign } from './align'
 import { backupAvailable, deleteBackup, listBackups, restoreBackup, uploadBackup } from './backup'
+import { initGenImage } from './genimage'
 import { initGenVideo } from './genvideo'
 import { initNormalize } from './normalize'
 import { initSlicer } from './slicer'
@@ -20,16 +21,27 @@ import { newProject, type AnimationData, type ProjectData } from './types'
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T =>
   document.querySelector(sel) as T
 
-type Screen = 'home' | 'project' | 'editor' | 'align' | 'sprites' | 'normalize' | 'genvideo' | 'slicer'
+type Screen = 'home' | 'project' | 'editor' | 'align' | 'sprites' | 'normalize' | 'genvideo' | 'slicer' | 'genimage'
 let cleanup: (() => void) | null = null
+
+const NAV_BY_SCREEN: Partial<Record<Screen, string>> = {
+  genimage: 'nav-genimage',
+  normalize: 'nav-normalize',
+  slicer: 'nav-slicer',
+  genvideo: 'nav-genvideo',
+}
 
 function show(screen: Screen): void {
   cleanup?.()
   cleanup = null
-  for (const s of ['home', 'project', 'editor', 'align', 'sprites', 'normalize', 'genvideo', 'slicer'] as const) {
+  for (const s of ['home', 'project', 'editor', 'align', 'sprites', 'normalize', 'genvideo', 'slicer', 'genimage'] as const) {
     $(`#screen-${s}`).classList.toggle('hidden', s !== screen)
   }
   document.body.classList.toggle('in-editor', screen !== 'home' && screen !== 'project')
+  // estado ativo da navbar global
+  for (const id of Object.values(NAV_BY_SCREEN)) {
+    $(`#${id}`).classList.toggle('active', NAV_BY_SCREEN[screen] === id)
+  }
 }
 
 function crumb(text: string): void {
@@ -113,7 +125,10 @@ async function goHome(): Promise<void> {
       await deleteBackup(b.id)
       void goHome()
     }
-    card.append(name, meta, restore, del)
+    const top = document.createElement('div')
+    top.className = 'pc-top'
+    top.append(name, meta, restore, del)
+    card.append(top)
     listEl.append(card)
   }
 
@@ -128,12 +143,14 @@ async function goHome(): Promise<void> {
   for (const p of projects) {
     const card = document.createElement('div')
     card.className = 'proj-card'
+    const top = document.createElement('div')
+    top.className = 'pc-top'
     const name = document.createElement('span')
     name.className = 'pc-name'
     name.textContent = p.name
     const meta = document.createElement('span')
     meta.className = 'pc-meta'
-    meta.textContent = `${p.animations.length} animações · ${new Date(p.updatedAt).toLocaleDateString('pt-BR')}`
+    meta.textContent = `${p.animations.length} animações · ${p.refs.length} refs · ${new Date(p.updatedAt).toLocaleDateString('pt-BR')}`
     const open = document.createElement('button')
     open.className = 'btn btn-small'
     open.textContent = 'ABRIR'
@@ -147,7 +164,33 @@ async function goHome(): Promise<void> {
       await deleteProject(p.id)
       void goHome()
     }
-    card.append(name, meta, open, del)
+    top.append(name, meta, open, del)
+    card.append(top)
+
+    // preview do conteúdo: thumbs das animações + referências (até 6)
+    const blobs: { blob: Blob; title: string }[] = []
+    for (const a of p.animations) {
+      if (a.thumb) blobs.push({ blob: a.thumb, title: a.name })
+    }
+    for (const r of p.refs) blobs.push({ blob: r.blob, title: r.name })
+    if (blobs.length) {
+      const strip = document.createElement('div')
+      strip.className = 'pc-thumbs'
+      for (const t of blobs.slice(0, 6)) {
+        const img = document.createElement('img')
+        img.src = URL.createObjectURL(t.blob)
+        img.onload = () => URL.revokeObjectURL(img.src)
+        img.title = t.title
+        strip.append(img)
+      }
+      if (blobs.length > 6) {
+        const more = document.createElement('span')
+        more.className = 'dim pc-more'
+        more.textContent = `+${blobs.length - 6}`
+        strip.append(more)
+      }
+      card.append(strip)
+    }
     card.ondblclick = () => openProject(p)
     listEl.append(card)
   }
@@ -170,18 +213,52 @@ $<HTMLInputElement>('#new-proj-name').onkeydown = (e) => {
   if (e.code === 'Enter') $('#btn-create').click()
 }
 
-$<HTMLButtonElement>('#btn-normalize').onclick = () => {
+// ── navbar global (fixa em todas as telas) ────────────────
+
+/** volta para o projeto aberto, ou para a home */
+function backFromTool(): void {
+  if (state.project) goProject()
+  else void goHome()
+}
+
+function toolNavLabel(): string {
+  return state.project ? '← PROJETO' : '← INÍCIO'
+}
+
+function goGenImage(): void {
+  show('genimage')
+  crumb(state.project ? `${state.project.name} / gerar imagem` : 'gerador de imagem')
+  setNav(toolNavLabel(), backFromTool)
+  cleanup = initGenImage()
+}
+
+function goNormalize(): void {
   show('normalize')
   crumb('normalizador de referências')
-  setNav('← INÍCIO', () => void goHome())
+  setNav(toolNavLabel(), backFromTool)
   cleanup = initNormalize()
 }
 
-$<HTMLButtonElement>('#btn-slicer').onclick = () => {
+function goSlicer(): void {
   show('slicer')
   crumb('fatiador de itens')
-  setNav('← INÍCIO', () => void goHome())
+  setNav(toolNavLabel(), backFromTool)
   cleanup = initSlicer()
+}
+
+$<HTMLButtonElement>('#nav-genimage').onclick = goGenImage
+$<HTMLButtonElement>('#nav-normalize').onclick = goNormalize
+$<HTMLButtonElement>('#nav-slicer').onclick = goSlicer
+$<HTMLButtonElement>('#nav-genvideo').onclick = () => {
+  if (!state.project) {
+    toast('ABRA UM PROJETO PARA GERAR VÍDEO — ELE USA AS REFERÊNCIAS DO PROJETO', true)
+    return
+  }
+  goGenVideo()
+}
+$('#logo-home').onclick = () => {
+  void saveProject()
+  void goHome()
 }
 
 function openProject(p: ProjectData): void {

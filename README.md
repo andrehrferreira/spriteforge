@@ -118,6 +118,23 @@ manifesto JSON único (`meta.version = 4` é a versão do formato;
 Todos os atlas compartilham a mesma célula e pivô — a engine pode trocar de
 animação sem o sprite "pular".
 
+## Navegação
+
+Uma navbar fixa no topo (visível em qualquer tela) dá acesso às ferramentas
+com um clique: **Gerador de Imagem**, **Normalizador**, **Fatiador de
+Sprites** e **Gerador de Vídeo** (este exige projeto aberto). O logo volta
+para a home, e os cards de projeto mostram miniaturas do conteúdo
+(animações + referências) para identificação rápida.
+
+## Gerador de imagem (OpenRouter)
+
+Cria as imagens de referência do personagem sem sair do app: prompt +
+modelo (Gemini Flash Image, Grok Imagine, FLUX), aspecto e tamanho, com
+referências opcionais anexadas (image-to-image para manter a consistência
+do personagem). O resultado vai para uma galeria da sessão — baixe o PNG ou
+adicione direto às referências do projeto aberto. Usa a mesma API key do
+gerador de vídeo.
+
 ## Fatiador de itens
 
 Ferramenta avulsa (na tela inicial) para folhas de itens (gemas, ícones,

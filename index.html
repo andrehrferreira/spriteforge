@@ -11,7 +11,34 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="logo">SPRITE<span>FORGE</span></div>
+    <div class="logo" id="logo-home" title="início">SPRITE<span>FORGE</span></div>
+    <nav class="navtools" aria-label="ferramentas">
+      <button id="nav-genimage" class="nav-icon" data-tip="Gerador de Imagem">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4">
+          <rect x="1.7" y="2.7" width="12.6" height="10.6" />
+          <circle cx="5.6" cy="6.2" r="1.1" fill="currentColor" stroke="none" />
+          <path d="M2.5 12l3.5-3.5 2.5 2.5 2.5-2.5 2.5 2.8" />
+        </svg>
+      </button>
+      <button id="nav-normalize" class="nav-icon" data-tip="Normalizador de Referências">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="8" cy="7" r="4" />
+          <path d="M8 1v3M8 10v3M2 7h3M11 7h3M2.5 14.5h11" />
+        </svg>
+      </button>
+      <button id="nav-slicer" class="nav-icon" data-tip="Fatiador de Sprites">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4">
+          <rect x="1.7" y="1.7" width="12.6" height="12.6" />
+          <path d="M6 1.7v12.6M10 1.7v12.6M1.7 6h12.6M1.7 10h12.6" />
+        </svg>
+      </button>
+      <button id="nav-genvideo" class="nav-icon" data-tip="Gerador de Vídeo (requer projeto aberto)">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4">
+          <rect x="1.7" y="3.7" width="8.6" height="8.6" />
+          <path d="M10.3 7.2l4-2.7v7l-4-2.7z" />
+        </svg>
+      </button>
+    </nav>
     <div class="topbar-right">
       <span id="crumb" class="video-name"></span>
       <button id="btn-back" class="btn btn-ghost hidden">← VOLTAR</button>
@@ -37,19 +64,79 @@
       </div>
     </div>
 
-    <div class="panel new-proj tool-panel">
-      <span class="field-label">FERRAMENTAS</span>
-      <div class="cfg-row tool-row">
-        <span class="tool-desc dim">normalizar imagens de referência — pés no mesmo pivô, centralizadas, fundo chroma #00b140</span>
-        <button id="btn-normalize" class="btn">NORMALIZADOR_</button>
-      </div>
-      <div class="cfg-row tool-row">
-        <span class="tool-desc dim">fatiar folha de itens (gemas, ícones, drops) — detecção automática, ajuste do corte e exportação uniforme em ZIP</span>
-        <button id="btn-slicer" class="btn">FATIADOR DE ITENS_</button>
-      </div>
-    </div>
-
     <div id="project-list" class="proj-list"></div>
+  </main>
+
+  <!-- ════ TELA: GERADOR DE IMAGEM ════ -->
+  <main id="screen-genimage" class="screen editor hidden">
+    <div class="align-grid">
+
+      <section class="panel align-preview-panel">
+        <div class="panel-title">GERADOR DE IMAGEM <span id="gi-status" class="dim"></span>
+          <div class="title-actions">
+            <button id="gi-add" class="btn btn-small" title="anexa imagens de referência à geração (image-to-image)">+ REFERÊNCIA</button>
+          </div>
+        </div>
+        <input type="file" id="gi-files" accept="image/*" multiple hidden />
+        <div class="frames-hint dim">referências anexadas: <span id="gi-refs-count">0</span> &middot; o modelo usa as imagens como base (consistência de personagem)</div>
+        <div id="gi-refs" class="gv-refs"></div>
+        <div class="preview-wrap bg-dark gv-wrap">
+          <img id="gi-big" class="hidden" alt="imagem gerada" />
+        </div>
+        <div class="preview-controls">
+          <button id="gi-download" class="btn" disabled>BAIXAR PNG_</button>
+          <button id="gi-use" class="btn btn-primary hidden" disabled title="salva a imagem nas referências do projeto aberto">+ REFERÊNCIAS DO PROJETO_</button>
+        </div>
+        <div id="gi-gallery" class="gv-refs" style="margin-top: 10px"></div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <div class="panel-title">OPENROUTER</div>
+          <label class="field">
+            <span class="field-label">API KEY (compartilhada com o gerador de vídeo)</span>
+            <input type="password" id="gi-key" class="text-input" placeholder="sk-or-v1-..." spellcheck="false" autocomplete="off" />
+          </label>
+          <label class="field" style="margin-top: 10px">
+            <span class="field-label">MODELO</span>
+            <select id="gi-model"></select>
+          </label>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">GERAÇÃO</div>
+          <label class="field">
+            <span class="field-label">PROMPT</span>
+            <textarea id="gi-prompt" class="text-input text-area" rows="5" spellcheck="false" placeholder="ex: personagem maga de corpo inteiro, vista lateral olhando para a direita, fundo verde #00b140 sólido, estilo ilustração de jogo"></textarea>
+          </label>
+          <div class="cfg-row tight" style="margin-top: 10px">
+            <label class="field">
+              <span class="field-label">ASPECTO</span>
+              <select id="gi-aspect">
+                <option value="1:1" selected>1:1</option>
+                <option value="2:3">2:3</option>
+                <option value="3:4">3:4</option>
+                <option value="9:16">9:16</option>
+                <option value="3:2">3:2</option>
+                <option value="4:3">4:3</option>
+                <option value="16:9">16:9</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">TAMANHO</span>
+              <select id="gi-size">
+                <option value="0.5K">0.5K</option>
+                <option value="1K" selected>1K</option>
+                <option value="2K">2K</option>
+              </select>
+            </label>
+          </div>
+          <button id="gi-generate" class="btn btn-primary btn-block" style="margin-top: 14px">GERAR IMAGEM_</button>
+          <div class="frames-hint dim" style="margin-top: 10px">dica: peça fundo #00b140 sólido no prompt — sai pronto para o normalizador e o gerador de vídeo</div>
+        </section>
+      </aside>
+
+    </div>
   </main>
 
   <!-- ════ TELA: NORMALIZADOR DE REFERÊNCIAS ════ -->
