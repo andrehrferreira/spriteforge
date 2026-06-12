@@ -662,7 +662,8 @@ input[type="range"]::-moz-range-thumb {
 }
 #at-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-#screen-slicer .align-preview-panel .frames-hint { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#screen-slicer .align-preview-panel .frames-hint,
+#screen-atlas .align-preview-panel .frames-hint { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 /* fundos de teste do fatiador */
 .preview-wrap.bg-black { background: #000; }

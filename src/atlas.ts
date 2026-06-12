@@ -63,6 +63,17 @@ export function initAtlas(): () => void {
   const colorsSelect = $<HTMLSelectElement>('#at-colors')
   const nameInput = $<HTMLInputElement>('#at-name')
 
+  // fundo do preview (transparente/preto/branco), como no fatiador
+  document.querySelectorAll<HTMLButtonElement>('[data-atbg]').forEach((btn) => {
+    btn.onclick = () => {
+      document.querySelectorAll('[data-atbg]').forEach((b) => b.classList.remove('active'))
+      btn.classList.add('active')
+      const bg = btn.dataset.atbg
+      const cls = bg === 'black' ? 'bg-black' : bg === 'white' ? 'bg-white' : 'checker'
+      wrap.className = `preview-wrap align-wrap ${cls}`
+    }
+  })
+
   function chosen(): IconRecord[] {
     return icons.filter((i) => selected.has(i.id))
   }

@@ -660,7 +660,13 @@
 
       <section class="panel align-preview-panel">
         <div class="panel-title">ATLAS DE ÍCONES <span id="at-count" class="dim"></span></div>
-        <div class="frames-hint dim">preview do atlas montado — selecione os ícones na BIBLIOTECA ao lado</div>
+        <div class="frames-hint dim">preview do atlas montado — selecione os ícones na BIBLIOTECA ao lado
+          <span class="chip-group push-right" title="fundo do preview">
+            <button class="chip bg-chip bg-checker active" data-atbg="checker"></button>
+            <button class="chip bg-chip sl-bg-black" data-atbg="black" title="fundo preto"></button>
+            <button class="chip bg-chip sl-bg-white" data-atbg="white" title="fundo branco"></button>
+          </span>
+        </div>
         <div id="at-wrap" class="preview-wrap checker align-wrap">
           <canvas id="at-canvas"></canvas>
         </div>
