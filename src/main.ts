@@ -5,6 +5,7 @@
 import './style.css'
 import { initAlign } from './align'
 import { backupAvailable, deleteBackup, listBackups, restoreBackup, uploadBackup } from './backup'
+import { initAtlas } from './atlas'
 import { initGenImage } from './genimage'
 import { initGenVideo } from './genvideo'
 import { initNormalize } from './normalize'
@@ -21,7 +22,7 @@ import { newProject, type AnimationData, type ProjectData } from './types'
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T =>
   document.querySelector(sel) as T
 
-type Screen = 'home' | 'project' | 'editor' | 'align' | 'sprites' | 'normalize' | 'genvideo' | 'slicer' | 'genimage'
+type Screen = 'home' | 'project' | 'editor' | 'align' | 'sprites' | 'normalize' | 'genvideo' | 'slicer' | 'genimage' | 'atlas'
 let cleanup: (() => void) | null = null
 
 const NAV_BY_SCREEN: Partial<Record<Screen, string>> = {
@@ -29,12 +30,13 @@ const NAV_BY_SCREEN: Partial<Record<Screen, string>> = {
   normalize: 'nav-normalize',
   slicer: 'nav-slicer',
   genvideo: 'nav-genvideo',
+  atlas: 'nav-atlas',
 }
 
 function show(screen: Screen): void {
   cleanup?.()
   cleanup = null
-  for (const s of ['home', 'project', 'editor', 'align', 'sprites', 'normalize', 'genvideo', 'slicer', 'genimage'] as const) {
+  for (const s of ['home', 'project', 'editor', 'align', 'sprites', 'normalize', 'genvideo', 'slicer', 'genimage', 'atlas'] as const) {
     $(`#screen-${s}`).classList.toggle('hidden', s !== screen)
   }
   document.body.classList.toggle('in-editor', screen !== 'home' && screen !== 'project')
@@ -246,9 +248,17 @@ function goSlicer(): void {
   cleanup = initSlicer()
 }
 
+function goAtlasTool(): void {
+  show('atlas')
+  crumb('atlas de ícones')
+  setNav(toolNavLabel(), backFromTool)
+  cleanup = initAtlas()
+}
+
 $<HTMLButtonElement>('#nav-genimage').onclick = goGenImage
 $<HTMLButtonElement>('#nav-normalize').onclick = goNormalize
 $<HTMLButtonElement>('#nav-slicer').onclick = goSlicer
+$<HTMLButtonElement>('#nav-atlas').onclick = goAtlasTool
 $<HTMLButtonElement>('#nav-genvideo').onclick = () => {
   if (!state.project) {
     toast('ABRA UM PROJETO PARA GERAR VÍDEO — ELE USA AS REFERÊNCIAS DO PROJETO', true)

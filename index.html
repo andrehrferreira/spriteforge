@@ -38,6 +38,14 @@
           <path d="M10.3 7.2l4-2.7v7l-4-2.7z" />
         </svg>
       </button>
+      <button id="nav-atlas" class="nav-icon" data-tip="Atlas de Ícones">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4">
+          <rect x="1.7" y="1.7" width="5.2" height="5.2" fill="currentColor" stroke="none" />
+          <rect x="9.1" y="1.7" width="5.2" height="5.2" />
+          <rect x="1.7" y="9.1" width="5.2" height="5.2" />
+          <rect x="9.1" y="9.1" width="5.2" height="5.2" fill="currentColor" stroke="none" />
+        </svg>
+      </button>
     </nav>
     <div class="topbar-right">
       <span id="crumb" class="video-name"></span>
@@ -632,7 +640,59 @@
             </select>
           </label>
           <div id="sl-summary" class="exp-summary dim"></div>
-          <button id="sl-export" class="btn btn-primary btn-block">EXPORTAR ZIP_</button>
+          <button id="sl-save" class="btn btn-block" title="grava os ícones na biblioteca para compor o atlas">SALVAR P/ ATLAS_</button>
+          <button id="sl-export" class="btn btn-primary btn-block" style="margin-top: 8px">EXPORTAR ZIP_</button>
+        </section>
+      </aside>
+
+    </div>
+  </main>
+
+  <!-- ════ TELA: ATLAS DE ÍCONES ════ -->
+  <main id="screen-atlas" class="screen editor hidden">
+    <div class="align-grid">
+
+      <section class="panel align-preview-panel">
+        <div class="panel-title">ATLAS DE ÍCONES <span id="at-count" class="dim"></span>
+          <div class="title-actions">
+            <button id="at-all" class="btn btn-small">TODOS</button>
+            <button id="at-none" class="btn btn-small">NENHUM</button>
+          </div>
+        </div>
+        <div class="frames-hint dim">clique no ícone para incluir/excluir do atlas &middot; × remove da biblioteca &middot; alimente a biblioteca pelo FATIADOR</div>
+        <div id="at-grid" class="at-grid"></div>
+        <div id="at-wrap" class="preview-wrap checker align-wrap">
+          <canvas id="at-canvas"></canvas>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <div class="panel-title">ATLAS</div>
+          <label class="field">
+            <span class="field-label">NOME</span>
+            <input type="text" id="at-name" class="text-input" spellcheck="false" value="icones" />
+          </label>
+          <div class="cfg-row tight" style="margin-top: 10px">
+            <label class="field">
+              <span class="field-label">COLUNAS</span>
+              <input type="number" id="at-cols" class="text-input" min="0" max="64" value="0" title="0 = automático" />
+            </label>
+            <label class="field">
+              <span class="field-label">PADDING</span>
+              <input type="number" id="at-padding" class="text-input" min="0" max="32" value="0" />
+            </label>
+          </div>
+          <label class="field" style="margin-top: 10px">
+            <span class="field-label">COMPACTAÇÃO</span>
+            <select id="at-colors">
+              <option value="0">sem perda (otimizado)</option>
+              <option value="256" selected>256 cores (recomendado)</option>
+              <option value="128">128 cores</option>
+            </select>
+          </label>
+          <div id="at-summary" class="exp-summary dim"></div>
+          <button id="at-export" class="btn btn-primary btn-block">EXPORTAR ATLAS_</button>
         </section>
       </aside>
 

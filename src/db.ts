@@ -3,14 +3,16 @@
  * v1: store `projects` (projetos completos, incluindo os vídeos).
  * v2: + store `spritesheets` (gerações de atlas, separadas do projeto para
  *     que salvar o projeto não reserialize os PNGs — e vice-versa).
+ * v3: + store `icons` (biblioteca global de ícones do fatiador).
  */
 
-import type { ProjectData, SpriteSheet } from './types'
+import type { IconRecord, ProjectData, SpriteSheet } from './types'
 
 const DB_NAME = 'spriteforge'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const PROJECTS = 'projects'
 const SHEETS = 'spritesheets'
+const ICONS = 'icons'
 
 /** quota do navegador esgotada ao gravar no IndexedDB */
 export class QuotaError extends Error {
@@ -39,6 +41,9 @@ function openDb(): Promise<IDBDatabase> {
         if (!db.objectStoreNames.contains(SHEETS)) {
           const s = db.createObjectStore(SHEETS, { keyPath: 'id' })
           s.createIndex('projectId', 'projectId', { unique: false })
+        }
+        if (!db.objectStoreNames.contains(ICONS)) {
+          db.createObjectStore(ICONS, { keyPath: 'id' })
         }
       }
       req.onsuccess = () => resolve(req.result)
@@ -75,5 +80,12 @@ export const putSheet = (sheet: SpriteSheet): Promise<void> =>
   tx(SHEETS, 'readwrite', (s) => s.put(sheet)).then(() => undefined)
 export const deleteSheet = (id: string): Promise<void> =>
   tx(SHEETS, 'readwrite', (s) => s.delete(id)).then(() => undefined)
+
+// ── ícones (biblioteca do fatiador) ───────────────────────
+export const listIcons = (): Promise<IconRecord[]> => tx(ICONS, 'readonly', (s) => s.getAll())
+export const putIcon = (icon: IconRecord): Promise<void> =>
+  tx(ICONS, 'readwrite', (s) => s.put(icon)).then(() => undefined)
+export const deleteIcon = (id: string): Promise<void> =>
+  tx(ICONS, 'readwrite', (s) => s.delete(id)).then(() => undefined)
 
 export const uid = (): string => crypto.randomUUID()

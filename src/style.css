@@ -633,6 +633,32 @@ input[type="range"]::-moz-range-thumb {
 #align-canvas, #norm-canvas, #sp-canvas, #sl-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 #sl-canvas { cursor: crosshair; }
 
+/* ── Atlas de ícones ────────────────────────────────────── */
+.at-grid {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  max-height: 220px; overflow-y: auto;
+  margin-bottom: 12px;
+  align-content: start;
+}
+.at-cell {
+  position: relative;
+  width: 64px; height: 64px; flex: none;
+  border: 1px solid var(--line);
+  background: repeating-conic-gradient(#1d231c 0% 25%, #11160f 0% 50%) 0 0 / 10px 10px;
+  cursor: pointer;
+  opacity: 0.45;
+}
+.at-cell img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.at-cell.sel { border-color: var(--acid); opacity: 1; box-shadow: 0 0 0 1px var(--acid); }
+.at-tag {
+  position: absolute; left: 0; bottom: 0;
+  font-family: var(--font-pix); font-size: 7px;
+  background: rgba(0, 0, 0, 0.75); color: var(--dim);
+  padding: 1px 4px;
+  pointer-events: none;
+}
+#at-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
 .sl-item-row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
 .sl-item-preview {
   width: 128px; height: 128px; flex: none;

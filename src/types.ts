@@ -144,6 +144,16 @@ export interface SheetAnimMeta {
   keptPositions: number[]
 }
 
+/** ícone salvo na biblioteca global (store `icons`), vindo do fatiador */
+export interface IconRecord {
+  id: string
+  name: string
+  /** lado do quadrado em px */
+  size: number
+  blob: Blob
+  createdAt: number
+}
+
 /** uma geração persistida no store IndexedDB `spritesheets` */
 export interface SpriteSheet {
   id: string

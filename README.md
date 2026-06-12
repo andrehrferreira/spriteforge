@@ -144,6 +144,15 @@ corte num preview editável (mover, redimensionar, criar, excluir, ajuste
 numérico) e exporta todos no mesmo tamanho quadrado (32–128px, padrão
 64×64) com PNG quantizado, num ZIP único com manifesto.
 
+## Atlas de ícones
+
+Os ícones do fatiador podem ser **salvos numa biblioteca persistente**
+(botão SALVAR P/ ATLAS) e compostos depois na tela **Atlas de Ícones** (na
+navbar): selecione quais entram, configure colunas/padding/compactação, veja
+o preview ao vivo e exporte um ZIP com o atlas PNG + manifesto JSON (posição
+de cada ícone). A célula é uniforme (o maior tamanho selecionado), com
+ícones menores centralizados.
+
 ## Backup no servidor local
 
 O IndexedDB morre se o cache do navegador for limpo. O `npm run dev` sobe

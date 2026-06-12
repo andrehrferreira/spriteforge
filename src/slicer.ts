@@ -8,6 +8,7 @@
  */
 
 import { strToU8, zipSync } from 'fflate'
+import { putIcon, uid } from './db'
 import { encodeCanvas, slugify } from './export'
 import { toast } from './toast'
 
@@ -633,6 +634,57 @@ export function initSlicer(): () => void {
   sizeSelect.onchange = updateInfo
 
   // ── exportação ──────────────────────────────────────────
+
+  /** compõe uma caixa no quadrado de saída (mesmo caminho do export) */
+  async function composeItem(b: Box, out: number, marginPct: number, colors: number): Promise<Blob> {
+    const tb = trimmedBox(b)
+    const c = document.createElement('canvas')
+    c.width = out
+    c.height = out
+    const cx = c.getContext('2d')!
+    const f = fitRect(tb, out, marginPct)
+    cx.imageSmoothingEnabled = true
+    cx.imageSmoothingQuality = 'high'
+    cx.drawImage(src!, tb.x, tb.y, tb.w, tb.h, f.dx, f.dy, f.dw, f.dh)
+    return encodeCanvas(c, colors)
+  }
+
+  // salvar na biblioteca para a tela de ATLAS
+  const saveBtn = $<HTMLButtonElement>('#sl-save')
+  saveBtn.onclick = async () => {
+    if (!src || !boxes.length) {
+      toast('NADA PARA SALVAR', true)
+      return
+    }
+    saveBtn.disabled = true
+    try {
+      const out = Number(sizeSelect.value)
+      const marginPct = Math.max(0, Math.min(40, Number(marginInput.value) || 0))
+      const colors = Number(colorsSelect.value)
+      const base = slugify(nameInput.value || baseName)
+      const ordered = sortReadingOrder(boxes)
+      for (let i = 0; i < ordered.length; i++) {
+        saveBtn.textContent = `SALVANDO ${i + 1}/${ordered.length}...`
+        const blob = await composeItem(ordered[i], out, marginPct, colors)
+        await putIcon({
+          id: uid(),
+          name: `${base}_${String(i + 1).padStart(3, '0')}`,
+          size: out,
+          blob,
+          createdAt: Date.now(),
+        })
+        if (!alive) return
+      }
+      toast(`${ordered.length} ÍCONES SALVOS NA BIBLIOTECA ✓ — monte o atlas na tela ATLAS`)
+    } catch (err) {
+      console.error(err)
+      toast('ERRO AO SALVAR OS ÍCONES', true)
+    } finally {
+      saveBtn.disabled = false
+      saveBtn.textContent = 'SALVAR P/ ATLAS_'
+    }
+  }
+
   const exportBtn = $<HTMLButtonElement>('#sl-export')
   exportBtn.onclick = () => void exportZip()
 
